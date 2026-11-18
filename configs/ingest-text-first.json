@@ -1,0 +1,12 @@
+{
+  "backend": "none",
+  "render_pages": false,
+  "figures": false,
+  "archive_media": false,
+  "video": false,
+  "audio": false,
+  "target_shard_bytes": 536870912,
+  "articles_per_shard": 2000,
+  "outbox_limit_bytes": 214748364800,
+  "license_policy": "all"
+}

@@ -1,0 +1,17 @@
+{
+  "backend": "none",
+  "render_pages": true,
+  "figures": true,
+  "archive_media": true,
+  "video": false,
+  "audio": false,
+  "longest_side": 2048,
+  "chunk_tokens": 512,
+  "overlap_tokens": 64,
+  "target_shard_bytes": 268435456,
+  "articles_per_shard": 100,
+  "max_asset_bytes": 134217728,
+  "max_article_bytes": 2147483648,
+  "outbox_limit_bytes": 214748364800,
+  "license_policy": "all"
+}

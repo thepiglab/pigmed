@@ -1,0 +1,21 @@
+{
+  "backend": "gemma2",
+  "model_id": "google/embeddinggemma-2",
+  "revision": "REPLACE_WITH_MODEL_COMMIT_SHA",
+  "device": "cpu",
+  "modalities": "vision",
+  "dimension": 768,
+  "batch_size": 1,
+  "render_pages": true,
+  "figures": true,
+  "image_caption": true,
+  "archive_media": false,
+  "video": false,
+  "audio": false,
+  "chunk_tokens": 512,
+  "overlap_tokens": 64,
+  "longest_side": 2048,
+  "articles_per_shard": 2000,
+  "target_shard_bytes": 536870912,
+  "outbox_limit_bytes": 214748364800
+}

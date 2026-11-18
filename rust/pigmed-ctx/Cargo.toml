@@ -1,0 +1,41 @@
+[package]
+name = "pigmed-ctx"
+version = "0.1.0"
+edition = "2021"
+description = "PigMed retriever S2/S3 data: JATS citation and figure contexts, citation pairs, figure pairs and image fetcher, 8k contextual windows (docs/RETRIEVER_TRAINING_PLAN.md)"
+license = "MIT"
+
+[[bin]]
+name = "pigmed-ctx"
+path = "src/main.rs"
+
+[features]
+default = ["tokens"]
+# exact EG2 token counts for windows (HF tokenizers; needs a C compiler for onig)
+tokens = ["dep:tokenizers"]
+
+[dependencies]
+anyhow = "1"
+arrow-array = "60"
+parquet = { version = "60", default-features = false, features = ["arrow", "zstd", "snap"] }
+clap = { version = "4", features = ["derive"] }
+flate2 = "1"
+hex = "0.4"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "tiff", "webp", "bmp"] }
+md-5 = "0.10"
+rayon = "1"
+regex = "1"
+roxmltree = "0.20"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+sha2 = "0.10"
+tokenizers = { version = "0.23", default-features = false, features = ["onig"], optional = true }
+ureq = { version = "2", default-features = false, features = ["tls"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4

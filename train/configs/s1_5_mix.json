@@ -1,0 +1,22 @@
+{
+  "name": "s1.5-a",
+  "note": "Biomedical-first ~60/40. Sources are directories under --data (prep_pmc / prep_data / the retriever-data session). sym_* sources carry source.json {symmetric: true, prompt}. FEVER/MIRACL weights follow the S1 ablation verdict.",
+  "steps": 2600,
+  "steps_note": "optimiser steps PER RANK; queries per step = batch x world. 2600 x 128 x 8 GPUs = 2.7M queries ~ 3 epochs of the text pairs",
+  "sources": {
+    "pmc_title":   {"weight": 0.22},
+    "pmc_abssent": {"weight": 0.25},
+    "pmc_v3":      {"weight": 0.08},
+    "nq":          {"weight": 0.11},
+    "hotpotqa":    {"weight": 0.08},
+    "squad":       {"weight": 0.07},
+    "fever":       {"weight": 0.07},
+    "miracl":      {"weight": 0.02},
+    "sym_pairs":   {"weight": 0.10}
+  },
+  "args": {
+    "batch": 128, "pack_tokens": 32768, "q_len": 96, "d_len": 512,
+    "w_kd_dense": 1.0, "w_kd_late": 0.5, "l2sp": 0.01, "w_rev": 1.0,
+    "warmup": 150, "eval_every": 250, "ckpt_every": 250, "gather_group": 0
+  }
+}

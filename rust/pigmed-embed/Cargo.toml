@@ -1,0 +1,67 @@
+[package]
+name = "pigmed-embed"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92"
+description = "CPU embedding runner for PigMed (EmbeddingGemma 2, NeoMME-260M-Retriever) on ONNX Runtime"
+license = "MIT"
+publish = false
+
+[dependencies]
+# ONNX Runtime bindings. `load-dynamic` loads the exact libonnxruntime.so shipped in the Python
+# onnxruntime wheel (ORT_DYLIB_PATH), so the Rust and Python-ORT rows run the identical ORT build.
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "ndarray", "load-dynamic", "api-31"] }
+ndarray = "0.17"
+tokenizers = { version = "0.23", default-features = false, features = ["onig"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "tiff", "gif", "webp", "bmp"] }
+rustfft = "6"
+# same C decoders the card runtime uses (libjpeg-turbo family, libwebp) for bit-identical pixels
+mozjpeg = "0.10"
+webp = { version = "0.3", default-features = false }
+# x86-v4: AVX-512 GEMM kernels, chosen at runtime only on CPUs that have them
+gemm = { version = "0.19", default-features = false, features = ["std", "x86-v4", "rayon"] }
+rayon = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+ndarray-npy = "0.10"
+libc = "0.2"
+candle-core = { version = "0.11", optional = true }
+candle-nn = { version = "0.11", optional = true }
+
+[features]
+# Only for the backend-evidence GEMM microbenchmark; the runner itself does not use candle.
+candle = ["dep:candle-core", "dep:candle-nn"]
+
+[[bin]]
+name = "pigmed-embed"
+path = "src/main.rs"
+
+[lib]
+name = "pigmed_embed"
+path = "src/lib.rs"
+
+[[bin]]
+name = "flash-check"
+path = "src/bin/flash_check.rs"
+
+[[bin]]
+name = "linear-bench"
+path = "src/bin/linear_bench.rs"
+
+[[bin]]
+name = "candle-neomme"
+path = "src/bin/candle_neomme.rs"
+required-features = ["candle"]
+
+[[bin]]
+name = "gemm-bench"
+path = "src/bin/gemm_bench.rs"
+required-features = ["candle"]
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+debug = false

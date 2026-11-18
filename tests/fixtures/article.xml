@@ -1,0 +1,10 @@
+<article xmlns:xlink="http://www.w3.org/1999/xlink"><front><article-meta>
+<article-title>Ischemia and β-cell responses</article-title><contrib-group><contrib><name><surname>Example</surname><given-names>A</given-names></name></contrib></contrib-group>
+<permissions><license>Creative Commons Attribution 4.0</license></permissions>
+<abstract><p>Background evidence from an illustrative experiment.</p></abstract></article-meta></front>
+<body><sec id="s1"><title>Methods</title><p id="p1">Twenty animals were studied. Signals were sampled at high resolution.</p>
+<sec id="s1a"><title>Recording</title><p id="p2">The waveform amplitude changed after occlusion. See <xref rid="f1">Figure 1</xref>.</p></sec></sec>
+<sec id="s2"><title>Results</title><p id="p3">Controls maintained stable amplitude. Treated animals showed an initial rise and a subsequent decline.</p>
+<fig id="f1"><label>Figure 1</label><caption><p>Amplitude over time after intervention.</p></caption><graphic xlink:href="figure1"/></fig>
+<table-wrap id="t1"><label>Table 1</label><caption><p>Illustrative values.</p></caption><table><tr><th>Group</th><th>Value</th></tr><tr><td>Control</td><td>12</td></tr></table></table-wrap>
+<disp-formula id="eq1">a = b + c</disp-formula></sec></body></article>

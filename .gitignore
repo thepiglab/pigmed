@@ -1,0 +1,27 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.env
+
+# Pipeline working dirs
+work/
+cache/
+logs/
+locks/
+*.partial/
+
+# Site-specific configuration (cluster accounts, paths, run logs). Never committed.
+local/
+
+# Build outputs, editor/OS/tool files
+target/
+node_modules/
+*.orig
+.DS_Store
+.claude/
+
+# Captured third-party guideline pages for the opt-in `guideline-fixtures` tests (not redistributable).
+rust/pigmed-ingest/tests/fixtures/guidelines/

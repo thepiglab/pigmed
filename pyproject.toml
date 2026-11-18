@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pigmed"
+version = "0.1.0"
+description = "Bounded, rights-aware biomedical corpus ingestion and multimodal retrieval experiments"
+requires-python = ">=3.11"
+dependencies = ["requests>=2.31", "lxml>=5", "numpy>=1.26", "Pillow>=10"]
+
+[project.optional-dependencies]
+render = ["pypdfium2>=4.30"]
+hub = ["huggingface_hub>=0.34", "datasets>=3"]
+embed = ["torch>=2.6", "transformers>=5", "sentence-transformers>=6", "accelerate>=1", "huggingface_hub>=0.34"]
+parquet = ["pyarrow>=18"]
+test = ["pytest>=8", "reportlab>=4"]
+
+[project.scripts]
+pigmed = "pigmed.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

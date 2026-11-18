@@ -1,0 +1,67 @@
+//! <SOURCE NAME> (`<id>`): <one line on what the catalog is and which renditions exist>.
+//!
+//! Research dossier: <research package>/source_profiles/<id>.md (content paths, sample URLs, known failure modes,
+//! rights notes). Re-check robots.txt and terms before the first live run; record what you found in the registry
+//! entry's `notes`.
+//!
+//! Discovery: <catalog URL(s), pagination/facets, archive handling, how versions are told apart>
+//! Extraction: <content root selector, recommendation markup + grade labels, tables/figures, PDF fallbacks>
+//! Known gaps: <anything not handled yet; each becomes a `warnings` entry at runtime>
+//!
+//! To enable: copy to `<id>.rs`, `pub mod <id>;` + a match arm in `sources/mod.rs`, `"adapter": "<id>"` in
+//! configs/guideline_sources.json, and add an offline fixture test (below) with saved pages in
+//! tests/fixtures/guidelines/<id>/.
+use super::{Adapter, PlanRow};
+use crate::guidelines::doc::{Block, BlockKind, DateObservation, GuidelineDoc, Relation, Rights};
+use crate::guidelines::fetch::Fetcher;
+use crate::guidelines::html::{blocks_from_html, sel, text_of};
+use crate::guidelines::registry::SourceEntry;
+use super::static_list::blocks_for;
+use anyhow::Result;
+
+pub struct Template;
+
+#[async_trait::async_trait]
+impl Adapter for Template {
+    async fn discover(&self, src: &SourceEntry, f: &Fetcher, limit: Option<usize>) -> Result<Vec<PlanRow>> {
+        let catalog = f.get_ok(src.catalog_url.as_deref().unwrap_or_default()).await?;
+        let doc = scraper::Html::parse_document(&catalog.text());
+        let base = url::Url::parse(&catalog.record.final_url)?;
+        let mut out = vec![];
+        for a in doc.select(&sel("a.guideline-link")) {           // <- source-specific selector
+            let Some(href) = a.value().attr("href") else { continue };
+            let url = base.join(href)?.to_string();
+            out.push(PlanRow { source_id: src.id.clone(), doc_key: /* stable slug + version */ url.clone(),
+                               url, title: Some(text_of(&a)), rendition: Some("html".into()), version: None,
+                               extra: serde_json::Value::Null });
+            if limit.is_some_and(|l| out.len() >= l) { break; }
+        }
+        // follow pagination here; dedupe by doc_key; keep catalog order
+        Ok(out)
+    }
+
+    async fn extract(&self, src: &SourceEntry, f: &Fetcher, row: &PlanRow) -> Result<GuidelineDoc> {
+        let page = f.get_ok(&row.url).await?;               // refuses login walls and robots-disallowed URLs
+        let (mut blocks, mut warnings, _title) = blocks_for(&page, Some("main"), 30).await?;
+        // source-specific: turn recommendation boxes into BlockKind::Recommendation with the publisher's labels
+        for b in blocks.iter_mut() {
+            if b.text.starts_with("Recommendation") { /* parse label/strength/certainty exactly as printed */ }
+        }
+        // source-specific: version / status / dates / licence from the page, never guessed
+        // source-specific: every stated date as a DateObservation (label + raw text); `published`/`updated` only when
+        // the page labels them so. Versions: doc_key = work_key + version; supersession/errata/summaries as Relations.
+        Ok(GuidelineDoc {
+            source_id: src.id.clone(), doc_key: row.doc_key.clone(), work_key: None /* stable work slug */,
+            item_type: None /* the source's own label, snake_case */, title: row.title.clone().unwrap_or_default(),
+            url: row.url.clone(), publisher: None /* as printed on the document, not the registry name */,
+            status: "unknown".into(), rights: Rights { status: "unknown".into(), ..Default::default() },
+            blocks, fetches: vec![page.record], warnings, ..Default::default()
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // Offline fixture test: load tests/fixtures/guidelines/<id>/page.html, run the extraction helpers on it, and
+    // assert block counts, heading paths, recommendation labels/strengths, tables, figure URLs and metadata.
+}

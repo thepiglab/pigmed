@@ -1,0 +1,4 @@
+# AVX2 + FMA (every x86-64 server CPU since ~2015, incl. AMD EPYC Zen2/Zen3); lets the attention kernel's
+# softmax loops vectorise. Remove for older CPUs.
+[build]
+rustflags = ["-C", "target-feature=+avx2,+fma"]

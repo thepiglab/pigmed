@@ -1,0 +1,55 @@
+[package]
+name = "pigmed-ingest"
+version = "0.2.0"
+edition = "2021"
+description = "PigMed: bounded PMC/PubMed bulk acquisition and canonical bundle writer (Rust port of src/pigmed ingest path)"
+license = "MIT"
+
+[[bin]]
+name = "pigmed-rs"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+async-trait = "0.1"
+anydoc = "0.2"
+calamine = "0.38"
+cfb = "0.14"
+zip = { version = "8", default-features = false, features = ["deflate"] }
+pdf-inspector = "1"
+clap = { version = "4", features = ["derive"] }
+csv = "1"
+flate2 = "1"
+futures = "0.3"
+hex = "0.4"
+httpdate = "1"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "tiff", "gif", "webp", "bmp"] }
+fast_image_resize = { version = "5", features = ["image"] }
+libc = "0.2"
+md-5 = "0.10"
+percent-encoding = "2"
+pdfium-render = { version = "0.8", default-features = false, features = ["thread_safe", "sync", "image", "pdfium_latest"] }
+quick-xml = "0.37"
+rand = "0.8"
+scraper = "0.22"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "http2", "cookies"] }
+roxmltree = "0.20"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+sha2 = "0.10"
+tar = "0.4"
+tempfile = "3"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "time", "sync", "io-util"] }
+url = "2"
+
+[features]
+# Offline adapter tests that read captured third-party guideline pages from tests/fixtures/.
+# Those captures are not redistributed; see tests/fixtures/README.md.
+guideline-fixtures = []
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+debug = 1
