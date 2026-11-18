@@ -9,6 +9,7 @@ Open, reproducible biomedical search: a full-text **PubMed Central** corpus, par
 | 📦 **Corpus + vectors** | [`mkieffer/pigmed-pmc-eg2`](https://huggingface.co/datasets/mkieffer/pigmed-pmc-eg2): 9.3M PMC OA articles, chunks, 768-d vectors, media index |
 | 🗂 **Search index** | [`mkieffer/pigmed-pmc-eg2-index`](https://huggingface.co/datasets/mkieffer/pigmed-pmc-eg2-index) |
 | 💬 **Persona-written queries** | coming soon (draft card: [`datasets/pigmed-personas`](datasets/pigmed-personas)) |
+| 🔗 **Related repos** | [`flashembed`](https://github.com/thepiglab/flashembed): fast EmbeddingGemma 2 runtime (CPU/GPU) used to embed the corpus · [`flashcluster`](https://github.com/thepiglab/flashcluster): GPU e-means clustering for the topic atlas |
 
 ## How it fits together
 
@@ -24,13 +25,14 @@ Open, reproducible biomedical search: a full-text **PubMed Central** corpus, par
                               │ canonical bundles (items.jsonl.gz + assets.tar + manifest)
                               ▼                                                        │
    ┌───────────────────────────────────────────────────────────┐                       │
-   │ embed: pigmed-embed (CPU, ONNX Runtime) or GPU runner     │◀──────────────────────┘
+   │ embed: flashembed (CPU/GPU) · pigmed-embed (CPU, ORT)     │◀──────────────────────┘
    │ EmbeddingGemma 2 · naive + late-chunking vectors          │
    └──────────────────────────┬────────────────────────────────┘
                               ▼
    ┌───────────────────────────────────────────────────────────┐        ┌──────────────────────────────┐
    │ pigmed-export → Parquet (chunks / vectors / media)        │───────▶│ HF dataset · index · Space   │
-   └──────────────────────────┬────────────────────────────────┘        └──────────────────────────────┘
+   └──────────────────────────┬────────────────────────────────┘        │ topic atlas: flashcluster    │
+                              │                                         └──────────────────────────────┘
                               │
                               ▼  retriever training data
    pigmed-splits ──▶ pigmed-synth (+ pigmed-llmbatch) ──▶ pigmed-ctx ──▶ train/eg2late (PyTorch)
