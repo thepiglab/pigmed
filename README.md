@@ -35,9 +35,9 @@ Open, reproducible biomedical search: a full-text **PubMed Central** corpus, par
                               │                                         └──────────────────────────────┘
                               │
                               ▼  retriever training data
-   pigmed-splits ──▶ pigmed-synth (+ pigmed-llmbatch) ──▶ pigmed-ctx ──▶ train/eg2late (PyTorch)
-   leakage-safe     persona-written queries,            citation/figure   late-interaction head
-   paper splits     EG2 round-trip filter               contexts          on EmbeddingGemma 2
+   pigmed-splits ──▶ pigmed-querygen / -synth (+ llmbatch) ──▶ pigmed-ctx ──▶ train/eg2late (PyTorch)
+   leakage-safe     persona-written queries,                 citation/figure   late-interaction head
+   paper splits     EG2 round-trip filter                    contexts          on EmbeddingGemma 2
 ```
 
 ## What's where
@@ -49,6 +49,7 @@ Open, reproducible biomedical search: a full-text **PubMed Central** corpus, par
 | [`rust/pigmed-export`](rust/pigmed-export) | Embedded bundles → Parquet shards for the Hub | Rust |
 | [`rust/pigmed-splits`](rust/pigmed-splits) | Paper census, leakage-safe splits, split audit | Rust |
 | [`rust/pigmed-synth`](rust/pigmed-synth) | Synthetic-query generation, filtering and reports | Rust |
+| [`rust/pigmed-querygen`](rust/pigmed-querygen) + [`querygen/`](querygen) | Config-driven query generator (personas, intent cards, figure arm) | Rust + TOML |
 | [`rust/pigmed-llmbatch`](rust/pigmed-llmbatch) | Resumable batch client for OpenAI-compatible servers (vLLM/SGLang) | Rust |
 | [`rust/pigmed-ctx`](rust/pigmed-ctx) | Contextual (S2) and multimodal (S3) training data | Rust |
 | [`train/`](train) | `eg2late`: retriever training and evaluation | Python |
@@ -115,7 +116,7 @@ See [`train/README.md`](train/README.md) and [`docs/RETRIEVER_TRAINING_PLAN.md`]
 | Ingest test ladder and scale results | [TEST_LADDER](docs/TEST_LADDER.md) |
 | CPU embedding runner: parity and speed | [RUST_EMBED](docs/RUST_EMBED.md) |
 | Clinical guidelines: scraping, rights, embedding | [GUIDELINES](docs/GUIDELINES.md) · [GUIDELINES_EMBEDDING](docs/GUIDELINES_EMBEDDING.md) |
-| Retriever: plan, data, query recipe | [TRAINING_PLAN](docs/RETRIEVER_TRAINING_PLAN.md) · [DATA_PLAN](docs/RETRIEVER_DATA_PLAN.md) · [QUERY_RECIPE_V3](docs/RETRIEVER_QUERY_RECIPE_V3.md) · [TRAINING](docs/TRAINING.md) |
+| Retriever: plan, data, query recipe | [TRAINING_PLAN](docs/RETRIEVER_TRAINING_PLAN.md) · [DATA_PLAN](docs/RETRIEVER_DATA_PLAN.md) · [QUERY_RECIPE_V3](docs/RETRIEVER_QUERY_RECIPE_V3.md) · [QUERYGEN_SPEC](docs/QUERYGEN_SPEC.md) · [TRAINING](docs/TRAINING.md) |
 | Research surveys | [SEARCH_TECHNIQUES_2026](docs/SEARCH_TECHNIQUES_2026.md) · [INTENT_VS_QUERY](docs/INTENT_VS_QUERY_RESEARCH.md) |
 
 ## Licences and rights

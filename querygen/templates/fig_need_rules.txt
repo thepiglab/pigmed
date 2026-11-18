@@ -1,0 +1,10 @@
+For each card:
+- need: one sentence: what the person wants to see or learn from a figure like this, standalone (see the rules above); 8-30 words.
+- visible: what in the image meets the need, in at most 20 words (curves, bands, cells, lesions, arrows, labelled boxes, axis names).
+- answer: what the figure shows for this need, in at most 15 words.
+- specificity: how many published figures would meet this need. unique = essentially this one; few = a handful; many = a generic textbook image or a very common plot.
+- audience: which kinds of people would plausibly look for this figure (clinician, researcher, student, lay, other).
+- min_expertise: 0 anyone, 1 some background, 2 professional, 3 specialist in this area.
+- entities: 1-5 key named things (drug, gene, protein, stain, organ, condition, measure).
+- skip: true if the image cannot honestly meet a need of this type, or only the caption text could (leave the other fields short).
+Do not restate the caption: describe what someone would be looking for, not how the authors labelled it.

@@ -214,6 +214,12 @@ enum Cmd {
         #[arg(long)] records: PathBuf,
         #[arg(long)] out: PathBuf,
     },
+    /// Spend and budget of a hosted API key (LiteLLM-style /key/info), key read from a file; prints no key material
+    ApiSpend {
+        /// API root of a LiteLLM-style hosted endpoint
+        #[arg(long)] root: String,
+        #[arg(long)] key_file: PathBuf,
+    },
     /// Recipe v3 persona library as JSONL (deterministic; docs/RETRIEVER_QUERY_RECIPE_V3.md §3)
     Personas {
         #[arg(long, default_value_t = recipe3::LIBRARY_SIZE)] n: usize,
@@ -565,6 +571,27 @@ fn main() -> Result<()> {
             let commercial = arts.iter().filter(|a| a.commercial == Some(true)).count();
             let with_cons = arts.iter().filter(|a| !recipe3::constraints(a).is_empty()).count();
             println!("{}", json!({"articles": arts.len(), "annotated": found, "commercial": commercial, "with_constraints": with_cons}));
+        }
+        Cmd::ApiSpend { root, key_file } => {
+            let key = std::fs::read_to_string(&key_file).context("key file")?.trim().to_string();
+            let ag = ureq::AgentBuilder::new().timeout(std::time::Duration::from_secs(30)).build();
+            let mut out = json!({"ok": false});
+            for path in ["/key/info", "/v1/key/info"] {
+                match ag.get(&format!("{}{path}", root.trim_end_matches('/'))).set("Authorization", &format!("Bearer {key}")).call() {
+                    Ok(r) => {
+                        let v: Value = r.into_json()?;
+                        let i = if v["info"].is_object() { &v["info"] } else { &v };
+                        // only spend / budget fields: never the key, its hash or its alias
+                        out = json!({"ok": true, "path": path, "spend": i["spend"], "max_budget": i["max_budget"],
+                            "budget_reset_at": i["budget_reset_at"], "budget_duration": i["budget_duration"],
+                            "tpm_limit": i["tpm_limit"], "rpm_limit": i["rpm_limit"], "models": i["models"]});
+                        break;
+                    }
+                    Err(ureq::Error::Status(c, _)) => out = json!({"ok": false, "path": path, "status": c}),
+                    Err(e) => out = json!({"ok": false, "path": path, "error": e.to_string().replace(&key, "***")}),
+                }
+            }
+            println!("{out}");
         }
         Cmd::Personas { n, out } => {
             let l = persona::library(recipe3::LIBRARY_SEED, n);

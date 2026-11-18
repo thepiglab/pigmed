@@ -1,0 +1,232 @@
+# PigMed query generator config: v3.1d text arm (unchanged, as piloted) + the figure arm (c3fig).
+# This is the recipe of the B200 model / precision / reasoning-level grid, so its text queries stay comparable with the
+# v3.1d 4-model trial. v3.1e.toml and querygen.toml (v3.2) build on it. Spec: docs/QUERYGEN_SPEC.md.
+
+extends = "v3.1d.toml"
+recipe = "v3.1d-fig"
+layouts = ["c3pf", "c3fig"]
+
+# reasoning arms (thinking on, effort high/xhigh) spend output tokens before the JSON: larger cap than v3.1d's 16000
+[text.budget]
+cap = 24000
+
+# ------------------------------------------------------------------------------------------------ modality targets
+# Shares are of KEPT queries. The planner sizes the figure arm per article from the text arm's card count:
+#   figure slots wanted = text slots x s / (1 - s), s = figure + figure_composed share, times kept_ratio (text keep /
+#   figure keep, re-estimated after the trial). The realised share is reported by `querygen mix`.
+[modality]
+kept_ratio = 1.0
+targets = [
+  { name = "text_passage", share = 0.70, query = "text", status = "active" },
+  { name = "figure", share = 0.24, query = "text", status = "active" },
+  { name = "figure_composed", share = 0.06, query = "image+text", status = "active: image + question -> citing paragraph" },
+  { name = "table", share = 0.0, query = "text", status = "reserved: needs table units in the chunker" },
+  { name = "supplement", share = 0.0, query = "text", status = "reserved: needs supplement units" },
+  { name = "video", share = 0.0, query = "text", status = "reserved: generators take video as frames only" },
+  { name = "audio", share = 0.0, query = "text", status = "reserved: no approved generator takes audio (Inkling 2 Small, Glimmer, Gemma 4 26B/31B: text+image only)" },
+]
+
+# ------------------------------------------------------------------------------------------------ figure arm (c3fig)
+[figure]
+fallback_mode = "role_or_map"
+max_figures_per_article = 6
+max_cards_per_figure = 4
+styles_per_pair = 2
+image_max_side = 1280
+citing_paragraphs = 2
+citing_max_words = 200
+abstract_max_words = 250
+caption_max_words = 300
+min_caption_words = 8
+caption_copy_jaccard = 0.5
+# caption-based figure type of the input (pigmed-synth figure_type), used for planning card types
+caption_types = [
+  { name = "multipanel", min_panels = 3 },
+  { name = "radiology_clinical", regex = '''(?i)\b(CT|MRI|MR image|radiograph|X-ray|x ray|ultrasound|ultrasonograph|echocardiogra|angiogra|PET|endoscop|fundus|OCT|dermoscop|photograph|intraoperative|mammogra|clinical (?:photo|image|appearance))''' },
+  { name = "microscopy", regex = '''(?i)microscop|staining|stained|H&E|hematoxylin|haematoxylin|immunohisto|immunofluoresc|confocal|scale bar|magnification|histolog|\bTEM\b|\bSEM\b''' },
+  { name = "diagram", regex = '''(?i)schematic|diagram|flow ?chart|workflow|illustration|pathway|framework|study design|CONSORT|PRISMA|overview of|model of''' },
+  { name = "chart", regex = '''(?i)\bplot|graph|curve|\bbar|histogram|scatter|kaplan|survival|forest|\bROC\b|box ?plot|heat ?map|distribution|correlation|trend''' },
+]
+panel_regex = '''\(([A-H])\)|\b([A-H])[).:]\s|\bPanel ([A-H])\b'''
+rights_regex = '''(?i)\b(reproduced|reprinted|adapted|modified|redrawn|taken) (with permission )?(from|by)\b|with (kind )?permission|©|\(c\) ?\d{4}|copyright|courtesy of|all rights reserved|licensed under|creative commons|cc[- ]by'''
+
+# what stage A says the figure is (enum), with how a searcher names it
+kinds = [
+  ["kaplan_meier_curve", "Kaplan-Meier / survival curve"], ["forest_plot", "forest plot"], ["roc_curve", "ROC curve"],
+  ["bar_or_box_plot", "bar chart or box plot"], ["line_or_time_course", "line graph or time course"],
+  ["scatter_or_correlation", "scatter or correlation plot"], ["dose_response", "dose-response curve"], ["heat_map", "heat map"],
+  ["volcano_or_manhattan", "volcano or Manhattan plot"], ["western_blot_or_gel", "western blot or gel"],
+  ["flow_cytometry", "flow cytometry plot"], ["fluorescence_microscopy", "fluorescence / confocal micrograph"],
+  ["histology_stain", "histology or IHC stained section"], ["electron_micrograph", "electron micrograph"],
+  ["radiology_ct_mri_xray", "CT, MRI or X-ray image"], ["ultrasound_or_echo", "ultrasound or echocardiogram"],
+  ["clinical_photo_or_endoscopy", "clinical photograph or endoscopy image"], ["pathway_or_mechanism_diagram", "pathway or mechanism diagram"],
+  ["study_flowchart", "study flowchart (CONSORT / PRISMA)"], ["molecular_structure", "molecular or protein structure"],
+  ["map_geographic", "map"], ["phylogenetic_tree", "phylogenetic tree"], ["genome_track_or_alignment", "genome track or sequence alignment"],
+  ["device_or_setup_schematic", "schematic of a device or experimental setup"], ["table_as_image", "table shown as an image"],
+  ["multi_panel_mixed", "multi-panel figure"], ["other", "figure"],
+]
+
+# card types: what the person wants from the figure. target = what the query retrieves.
+[[figure.card_types]]
+name = "find_figure"
+weight = 40
+target = "figure"
+desc = "someone wants an image or plot of a specific thing"
+[[figure.card_types]]
+name = "finding"
+weight = 25
+target = "figure"
+desc = "someone wants the result the figure shows"
+[[figure.card_types]]
+name = "appearance"
+weight = 15
+target = "figure"
+desc = "someone wants to know what something looks like"
+sections = ["radiology_clinical", "microscopy", "multipanel"]
+[[figure.card_types]]
+name = "composed"
+weight = 20
+target = "text_passage"
+query_modality = "image+text"
+desc = "someone has the image and asks about it; the citing paragraph answers"
+requires_citing_chunk = true
+styles = ["composed"]
+
+[figure.templates]
+system_a = "system_fig_a.txt"
+stage_a = "stage_fig_a.txt"
+need_rules = "fig_need_rules.txt"
+card_defs = "fig_card_defs.txt"
+stage_b = "stage_fig_b.txt"
+stage_b_block = "stage_fig_b_block.txt"
+card_line = "{{id}}: card type {{ctype}}; candidate readers: {{readers}}. Set reader to the one most likely to look for THIS figure with a need of this type, or none if none of them plausibly would (then name the expert_role of a real professional who would); write that reader's need."
+none_text = "(none)"
+
+# figure surface styles (stage B never sees the image or caption, except that composed queries go WITH the image)
+[[figure.styles]]
+name = "find_figure"
+weight = 26
+register = "professional"
+desc = "a request to find a figure, image, plot or diagram showing something specific (\"figure showing...\", \"image of...\", \"diagram of...\", or the kind of plot then what it shows)"
+hints = "kind_forms"
+[[figure.styles]]
+name = "visual_keyword"
+weight = 14
+register = "professional"
+desc = "2-6 terms naming the kind of image and what it shows, typed into a search box: no question, no sentence"
+allowed = [{ min_expertise = 1 }]
+max_words = 7
+no_question_mark = true
+[[figure.styles]]
+name = "natural_question"
+weight = 14
+register = "professional"
+desc = "a plain question in this person's own words that a figure would answer"
+[[figure.styles]]
+name = "expert_terse"
+weight = 12
+register = "professional"
+desc = "a professional's terse search string for the figure, with technical terms and maybe abbreviations, no question words"
+allowed = [{ min_expertise = 2 }]
+max_words = 15
+[[figure.styles]]
+name = "lay_visual"
+weight = 14
+register = "lay"
+desc = "everyday words for what they want to see (\"what does ... look like\", \"picture of ...\", \"scan showing ...\"), as a non-expert would say it"
+allowed = [{ max_expertise = 1 }, { literacy_not = ["high"] }]
+[[figure.styles]]
+name = "half_remembered"
+weight = 6
+register = "partial_recall"
+desc = "the person half-remembers a figure they once saw: vague or partly wrong visual details (\"that graph where the lines cross after a year\"), still clearly the same need"
+[[figure.styles]]
+name = "non_native"
+weight = 10
+register = "messy"
+desc = "written by this person in English as a second language: visible slips typical of their first language, still understandable"
+allowed = [{ english_not = ["native"] }]
+weight_mult = [{ when = { english = ["limited L2"] }, mult = 2 }]
+hints = "l2"
+[[figure.styles]]
+name = "composed"
+weight = 0
+register = "composed"
+desc = "a question typed while showing this image to the search engine: point at it (\"this curve\", \"the dark band\", \"these cells\", \"the arrow\") instead of describing it fully, and ask what the paper's text would explain"
+skip_checks = ["unresolved"]
+
+# how searchers phrase a find-figure request for each kind (hint for find_figure slots; not shown as examples)
+[figure.kind_forms]
+default = ["\"figure showing ...\"", "\"image of ...\"", "the kind of figure, then what it shows"]
+kaplan_meier_curve = ["\"kaplan meier curve ...\"", "\"survival curve for ...\""]
+forest_plot = ["\"forest plot ...\"", "\"meta-analysis forest plot of ...\""]
+roc_curve = ["\"ROC curve ...\"", "\"AUC plot for ...\""]
+western_blot_or_gel = ["\"western blot of ...\"", "\"blot showing ...\""]
+fluorescence_microscopy = ["\"confocal images of ...\"", "\"immunofluorescence ...\"", "\"microscopy of ...\""]
+histology_stain = ["\"H&E section showing ...\"", "\"histology of ...\"", "\"IHC staining for ...\""]
+electron_micrograph = ["\"electron micrograph of ...\"", "\"TEM image of ...\""]
+radiology_ct_mri_xray = ["\"CT scan showing ...\"", "\"MRI of ...\"", "\"x-ray of ...\""]
+ultrasound_or_echo = ["\"ultrasound image of ...\"", "\"echo showing ...\""]
+clinical_photo_or_endoscopy = ["\"photo of ...\"", "\"what does ... look like\"", "\"endoscopy image of ...\""]
+pathway_or_mechanism_diagram = ["\"diagram of the ... pathway\"", "\"schematic of how ...\"", "\"mechanism diagram ...\""]
+study_flowchart = ["\"CONSORT flow diagram ...\"", "\"PRISMA flowchart ...\""]
+heat_map = ["\"heat map of ...\""]
+volcano_or_manhattan = ["\"volcano plot ...\"", "\"manhattan plot ...\""]
+flow_cytometry = ["\"flow cytometry plot of ...\"", "\"FACS ...\""]
+molecular_structure = ["\"structure of ...\"", "\"3D model of ...\""]
+
+# ------------------------------------------------------------------------------------------------ figure filters
+[filters.figure]
+query_reject = ["empty", "leak", "spill", "banned", "tex", "unresolved", "local_label", "generic", "copy", "caption_copy", "style", "duplicate", "skip"]
+# like doc_ref, but "find the figure showing ..." is a real query; figure numbers and panel letters stay banned
+doc_ref = '''(?i)\b(this|these|the present|the current|our|that) (study|studies|trial|article|paper|cohort|analysis|experiment|work|patients|participants|subjects|sample|dataset|report|review|investigation|research)\b|according to|\bthe (authors|researchers|investigators|study|trial|paper|article|passage|experiment|above)\b|\bfig(ure|\.)?\s*\d|\btable\s*\d|\bpanel [a-h]\b|\b(group|arm) [a-d1-9]\b'''
+
+# ------------------------------------------------------------------------------------------------ gates
+[gates]
+eg2_query_prefix = "task: search result | query: "
+[[gates.rules]]
+modality = "text_passage"
+styles = ["expert_terse", "keyword", "natural_question", "scenario", "instruction"]
+keep = "source chunk in top-3"
+[[gates.rules]]
+modality = "text_passage"
+styles = ["lay_paraphrase", "half_remembered", "non_native"]
+keep = "source article in top-10"
+[[gates.rules]]
+modality = "figure"
+styles = ["*"]
+keep = "source figure in top-100 of the EG2 image corpus, then a cross-model VLM judge (sees image + caption) must say the figure answers the query; hardness quota: >= 30% of kept outside top-10"
+[[gates.rules]]
+modality = "figure_composed"
+styles = ["composed"]
+keep = "judge only (image + query + citing paragraph); EG2 image+text round trip once the multimodal query path exists"
+
+# ------------------------------------------------------------------------------------------------ reader fallback
+# Who writes when stage A says no candidate would read the article / look for the figure.
+#   "generic"     (v3.1d) stage A's concrete expert_role, else text.fallback_role ("expert working in this article's field")
+#   "role_or_map" (v3.1e) stage A's concrete expert_role, else the journal / MeSH field -> role map, else the card is dropped
+# Text cards keep v3.1d's "generic" here (the grid's text must stay comparable with the v3.1d trial); figure cards use
+# figure.fallback_mode = "role_or_map" (trial read 2026-11-18: no generic field expert).
+[fallback]
+mode = "generic"
+# stage-A roles too vague to use (case-insensitive, whole role)
+vague_roles = ["researcher", "scientist", "expert", "academic", "professional", "specialist", "clinician", "doctor",
+  "health professional", "healthcare professional", "biologist", "medical researcher", "biomedical researcher"]
+# MeSH tree prefix -> role; the most specific (longest) matching prefix over the article's trees wins
+mesh_roles = [
+  ["C01", "infectious disease physician"], ["C04", "oncologist"], ["C05", "orthopaedic surgeon"], ["C06", "gastroenterologist"],
+  ["C07", "dentist"], ["C08", "pulmonologist"], ["C09", "ENT surgeon"], ["C10", "neurologist"], ["C11", "ophthalmologist"],
+  ["C12", "urologist"], ["C13", "obstetrician-gynaecologist"], ["C14", "cardiologist"], ["C15", "haematologist"],
+  ["C16", "neonatologist"], ["C17", "dermatologist"], ["C18", "endocrinologist"], ["C19", "endocrinologist"],
+  ["C20", "immunologist"], ["C25", "toxicologist"], ["C26", "trauma surgeon"],
+  ["F01", "psychologist"], ["F03", "psychiatrist"], ["F04", "behavioural scientist"],
+  ["B01.650", "plant scientist"], ["B03", "microbiologist"], ["B04", "virologist"], ["B05", "mycologist"],
+  ["D02", "medicinal chemist"], ["D08", "biochemist"], ["D12", "biochemist"], ["D27", "pharmacologist"],
+  ["E05", "laboratory scientist"], ["G05", "geneticist"], ["G06", "microbiologist"], ["G07", "physiologist"],
+  ["G11", "neuroscientist"], ["N01", "epidemiologist"], ["N02", "health services researcher"], ["N03", "health economist"],
+  ["N04", "hospital administrator"], ["N05", "health services researcher"], ["N06", "public health physician"],
+]
+# lowercase substring of the journal title -> role (checked before mesh_roles: a veterinary journal means a vet reader)
+journal_roles = [["veterinar", "veterinarian"], ["dental", "dentist"], ["dentist", "dentist"], ["nursing", "nurse researcher"],
+  ["pharmac", "pharmacist"], ["plant", "plant scientist"], ["agri", "agronomist"], ["food", "food scientist"],
+  ["sport", "sports scientist"], ["nutrition", "dietitian"]]

@@ -144,7 +144,7 @@ Each stage has a gate: it must beat the previous checkpoint on the eval suite be
 ## Compute and people
 
 - **GPUs:** B200 / RTX PRO 6000, budgeted at **2 GPUs at a time**. Plan S1–S3 as 2-GPU runs (FSDP across 2, GradCache for batch size). S1–S3 fit in a few
-  hundred GPU-hours. Data mining, chunking and evaluation run on burst CPUs.
+  hundred GPU-hours. Data mining, chunking and evaluation run on CPU nodes.
 - **Stack:** PyTorch + PyLate + sentence-transformers for training; FSDP and GradCache; flashembed for fast
   embedding of training corpora and evaluation.
 
@@ -422,7 +422,7 @@ MedICaT (NC) and MedTrinity. The methods themselves are fine to reuse.
 
 ## Revised recipe and code status (2026-11-18)
 "CPU-tested" means the unit tests in `train/tests` pass on a tiny random EG2 built with the real tokenizer and
-processor files. "GPU check" items are covered by `train/tests/check_gpu.py` (job submitted, results pending).
+processor files. "GPU check" items are covered by `train/tests/check_gpu.py` (results in the next section).
 
 **S1.5: scale the text model.**
 - **Data:** the S1 sources plus a symmetric slice (`source.json` with `symmetric: true` and one shared prompt) and
@@ -460,11 +460,24 @@ processor files. "GPU check" items are covered by `train/tests/check_gpu.py` (jo
   (CPU-tested). ROCOv2 CC BY-only (2k pairs) is the external set.
 - **Status:** GPU check covers image parity with flashembed and step cost (frozen vs LoRA).
 
+### GPU check (*measured*, B200)
+| Check | Result |
+|---|---|
+| S2 late-chunk dense vs flashembed `text_late` | cos min 0.99973, mean 0.99998 (294 chunks) |
+| S3 image dense vs flashembed `image` | cos min 0.99998 (8 images). The image template is the image alone, so the v2 image vectors are a valid teacher and miner |
+| S2 step (64 queries, 18 windows / 122k tokens, 294 chunks) | 10.9 s, 37 GB peak (first step, includes warm-up) |
+| S3 step, vision frozen (32 captions × 128 images, micro-batch 16) | 9.1 s (first step, includes warm-up), 11 GB |
+| S3 step, vision LoRA r = 16 | 5.9 s, 51 GB |
+
+At these sizes a B200 holds 64 queries per rank for S2. For S3 with LoRA it holds about 64 captions × 4 images; an
+RTX PRO 6000 holds about 32 × 4. The S2 header caps the abstract at about 4,000 characters, because one PMC article
+had a 34k-token abstract.
+
 ## Next steps
 1. Final ablation evals (about 12:00), then pick the FEVER/MIRACL arm. Decide the abstract-sentence weight from
    SciFact and the PMC tasks.
-2. GPU check results: if late-chunk and image parity hold (cos ≥ 0.999), enable the v2 image-vector teacher. Size
-   the S2 and S3 batches from the measured memory.
+2. Done: parity holds, so the v2 image vectors are the S3 teacher and miner (the data side is building figvec and
+   capvec). S2 and S3 batch sizes follow from the measured memory.
 3. Data from the retriever-data session in the proposed formats: symmetric pairs, articles plus contextual queries,
    figures plus vectors.
 4. An S1.5 sweep (6–8 single-node runs) if a large GPU window opens. Otherwise the best mix on 8 cai GPUs. One

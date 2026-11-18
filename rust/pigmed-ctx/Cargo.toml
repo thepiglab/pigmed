@@ -20,6 +20,7 @@ arrow-array = "60"
 parquet = { version = "60", default-features = false, features = ["arrow", "zstd", "snap"] }
 clap = { version = "4", features = ["derive"] }
 flate2 = "1"
+half = "2"
 hex = "0.4"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "tiff", "webp", "bmp"] }
 md-5 = "0.10"

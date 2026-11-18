@@ -75,13 +75,14 @@ fn get(agent: &ureq::Agent, key: &str, local: Option<&Path>) -> Result<Vec<u8>> 
 pub fn run(a: &FetchArgs) -> Result<Value> {
     std::fs::create_dir_all(&a.out)?;
     let done_path = a.out.with_extension("done.tsv");
-    let mut done: HashMap<String, (String, u32, u32)> = HashMap::new();
+    // id -> (status, w, h, md5 of the original object); the md5 column is new, older lines lack it
+    let mut done: HashMap<String, (String, u32, u32, String)> = HashMap::new();
     if done_path.exists() {
         for line in crate::io::reader(&done_path)?.lines() {
             let line = line?;
             let f: Vec<&str> = line.split('\t').collect();
             if f.len() >= 5 {
-                done.insert(f[0].to_string(), (f[1].to_string(), f[3].parse().unwrap_or(0), f[4].parse().unwrap_or(0)));
+                done.insert(f[0].to_string(), (f[1].to_string(), f[3].parse().unwrap_or(0), f[4].parse().unwrap_or(0), f.get(5).unwrap_or(&"").to_string()));
             }
         }
     }
@@ -94,25 +95,25 @@ pub fn run(a: &FetchArgs) -> Result<Value> {
     let log = Mutex::new(std::fs::OpenOptions::new().create(true).append(true).open(&done_path)?);
     let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(120)).build();
     let pool = rayon::ThreadPoolBuilder::new().num_threads(a.threads).build()?;
-    let fresh: Vec<(String, String, u32, u32)> = pool.install(|| todo.par_iter().map(|r| {
+    let fresh: Vec<(String, String, u32, u32, String)> = pool.install(|| todo.par_iter().map(|r| {
         let id = r["id"].as_str().unwrap_or("").to_string();
         let key = r["s3_key"].as_str().unwrap_or("");
         let want = r["md5"].as_str().unwrap_or("").to_lowercase();
-        let (status, n, w, h) = match get(&agent, key, a.local.as_deref()) {
-            Err(e) => (e.to_string().split(':').next().unwrap_or("error").to_string(), 0, 0, 0),
+        let (status, n, w, h, got) = match get(&agent, key, a.local.as_deref()) {
+            Err(e) => (e.to_string().split(':').next().unwrap_or("error").to_string(), 0, 0, 0, String::new()),
             Ok(b) => {
                 let got = hex::encode(Md5::digest(&b));
                 if !want.is_empty() && got != want {
-                    ("md5_mismatch".to_string(), b.len(), 0, 0)
+                    ("md5_mismatch".to_string(), b.len(), 0, 0, got)
                 } else {
                     match transcode(&b, a.max_side, a.quality) {
-                        Err(_) => ("decode_error".to_string(), b.len(), 0, 0),
+                        Err(_) => ("decode_error".to_string(), b.len(), 0, 0, got),
                         Ok((jpg, w, h)) => {
                             let p = a.out.join(format!("{id}.jpg"));
                             let tmp = p.with_extension("jpg.tmp");
                             match std::fs::write(&tmp, &jpg).and_then(|_| std::fs::rename(&tmp, &p)) {
-                                Ok(_) => ("ok".to_string(), b.len(), w, h),
-                                Err(_) => ("write_error".to_string(), b.len(), 0, 0),
+                                Ok(_) => ("ok".to_string(), b.len(), w, h, got),
+                                Err(_) => ("write_error".to_string(), b.len(), 0, 0, got),
                             }
                         }
                     }
@@ -120,26 +121,31 @@ pub fn run(a: &FetchArgs) -> Result<Value> {
             }
         };
         if let Ok(mut f) = log.lock() {
-            let _ = writeln!(f, "{id}\t{status}\t{n}\t{w}\t{h}");
+            let _ = writeln!(f, "{id}\t{status}\t{n}\t{w}\t{h}\t{got}");
             let _ = f.flush();
         }
-        (id, status, w, h)
+        (id, status, w, h, got)
     }).collect());
-    for (id, s, w, h) in fresh {
-        done.insert(id, (s, w, h));
+    for (id, s, w, h, m) in fresh {
+        done.insert(id, (s, w, h, m));
     }
     let part = a.out.file_name().and_then(|x| x.to_str()).unwrap_or("").to_string();
     let mut fw = crate::io::JsonlOut::create(&a.out.with_extension("figures.jsonl.gz"))?;
     let mut status: std::collections::BTreeMap<String, usize> = Default::default();
     for r in &rows {
         let id = r["id"].as_str().unwrap_or("");
-        let Some((s, w, h)) = done.get(id) else { continue };
+        let Some((s, w, h, m)) = done.get(id) else { continue };
         *status.entry(s.clone()).or_default() += 1;
         if s == "ok" {
             let mut v = r.clone();
             v["image"] = json!(format!("{part}/{id}.jpg"));
             v["width"] = json!(w);
             v["height"] = json!(h);
+            // md5 of the ORIGINAL object (S1 masks duplicate figures across paper versions by it): keep the
+            // published one, fill it from the download when the published row had none
+            if v["md5"].as_str().map_or(true, str::is_empty) && !m.is_empty() {
+                v["md5"] = json!(m);
+            }
             fw.put(&v)?;
         }
     }
@@ -201,5 +207,6 @@ mod tests {
         let out: Vec<Value> = crate::io::reader(&d.path().join("img/part-00000.figures.jsonl.gz")).unwrap().lines()
             .map(|l| serde_json::from_str(&l.unwrap()).unwrap()).collect();
         assert_eq!((out[0]["image"].as_str().unwrap(), out[0]["width"].as_u64().unwrap()), ("part-00000/m1.jpg", 896));
+        assert_eq!(out[0]["md5"].as_str().unwrap(), hex::encode(Md5::digest(&a)));
     }
 }

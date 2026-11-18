@@ -201,7 +201,48 @@ pub(crate) fn image_data_url(path: &str) -> Result<String> {
     Ok(format!("data:image/jpeg;base64,{}", base64::engine::general_purpose::STANDARD.encode(std::fs::read(path)?)))
 }
 
+/// Hosted OpenAI-compatible APIs: the key is read once from the file named by PIGMED_API_KEY_FILE
+/// (never from the command line or the environment value itself), and a client-side spend cap applies:
+/// PIGMED_PRICE_IN / PIGMED_PRICE_OUT ($ per 1M tokens) and PIGMED_CAP_USD. Once the running estimate reaches the cap,
+/// no further request is sent. 429s are retried with backoff and counted.
+pub struct ApiState {
+    pub key: Option<String>,
+    pub price_in: f64,
+    pub price_out: f64,
+    pub cap: f64,
+    pub tok_in: std::sync::atomic::AtomicU64,
+    pub tok_out: std::sync::atomic::AtomicU64,
+    pub rate_limited: AtomicUsize,
+    pub refused_cap: AtomicUsize,
+}
+
+pub fn api() -> &'static ApiState {
+    static S: std::sync::OnceLock<ApiState> = std::sync::OnceLock::new();
+    S.get_or_init(|| {
+        let f = |k: &str| std::env::var(k).ok().and_then(|v| v.parse::<f64>().ok());
+        let key = std::env::var("PIGMED_API_KEY_FILE").ok().and_then(|p| std::fs::read_to_string(p).ok()).map(|k| k.trim().to_string()).filter(|k| !k.is_empty());
+        ApiState { key, price_in: f("PIGMED_PRICE_IN").unwrap_or(0.0), price_out: f("PIGMED_PRICE_OUT").unwrap_or(0.0),
+            cap: f("PIGMED_CAP_USD").unwrap_or(f64::INFINITY), tok_in: 0.into(), tok_out: 0.into(), rate_limited: 0.into(), refused_cap: 0.into() }
+    })
+}
+
+impl ApiState {
+    pub fn spent(&self) -> f64 {
+        (self.tok_in.load(Ordering::Relaxed) as f64 * self.price_in + self.tok_out.load(Ordering::Relaxed) as f64 * self.price_out) / 1e6
+    }
+    pub fn report(&self) -> Value {
+        json!({"hosted": self.key.is_some(), "prompt_tokens": self.tok_in.load(Ordering::Relaxed), "completion_tokens": self.tok_out.load(Ordering::Relaxed),
+            "est_usd": self.spent(), "cap_usd": if self.cap.is_finite() { json!(self.cap) } else { Value::Null },
+            "rate_limited_429": self.rate_limited.load(Ordering::Relaxed), "refused_at_cap": self.refused_cap.load(Ordering::Relaxed)})
+    }
+}
+
 pub(crate) fn post(agent: &ureq::Agent, a: &GenArgs, system: &str, user: Value, schema: Value) -> (Result<Reply, String>, f64) {
+    let st = api();
+    if st.spent() >= st.cap {
+        st.refused_cap.fetch_add(1, Ordering::Relaxed);
+        return (Err("spend cap reached".into()), 0.0);
+    }
     let mut body = json!({
         "model": a.model, "max_tokens": a.max_tokens, "temperature": a.temperature, "top_p": a.top_p,
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
@@ -214,13 +255,31 @@ pub(crate) fn post(agent: &ureq::Agent, a: &GenArgs, system: &str, user: Value, 
     }
     let t = Instant::now();
     let mut last_err = String::new();
-    for attempt in 0..3u64 {
-        match agent.post(&format!("{}/chat/completions", a.endpoint)).send_json(&body) {
+    let mut attempt = 0u64;
+    while attempt < 3 {
+        let mut req = agent.post(&format!("{}/chat/completions", a.endpoint));
+        if let Some(k) = &st.key {
+            req = req.set("Authorization", &format!("Bearer {k}"));
+        }
+        match req.send_json(&body) {
+            Err(ureq::Error::Status(429, r)) => {
+                st.rate_limited.fetch_add(1, Ordering::Relaxed);
+                let wait = r.header("retry-after").and_then(|x| x.parse::<u64>().ok()).unwrap_or(5 * (attempt + 1)).min(60);
+                last_err = "429 rate limited".into();
+                std::thread::sleep(Duration::from_secs(wait));
+                // 429s do not use up the attempt budget, but give up after ~10 minutes of them
+                if t.elapsed().as_secs() > 600 {
+                    break;
+                }
+                continue;
+            }
             Ok(resp) => match resp.into_json::<Value>() {
                 Ok(v) => {
                     let m = &v["choices"][0]["message"];
                     let reasoning = m["reasoning_content"].as_str().or_else(|| m["reasoning"].as_str()).unwrap_or("");
                     let u = &v["usage"];
+                    st.tok_in.fetch_add(u["prompt_tokens"].as_u64().unwrap_or(0), Ordering::Relaxed);
+                    st.tok_out.fetch_add(u["completion_tokens"].as_u64().unwrap_or(0), Ordering::Relaxed);
                     return (Ok(Reply {
                         content: m["content"].as_str().unwrap_or("").to_string(),
                         prompt_tokens: u["prompt_tokens"].as_u64().unwrap_or(0),
@@ -236,6 +295,7 @@ pub(crate) fn post(agent: &ureq::Agent, a: &GenArgs, system: &str, user: Value, 
                 std::thread::sleep(Duration::from_secs(2 * (attempt + 1)));
             }
         }
+        attempt += 1;
     }
     (Err(last_err), t.elapsed().as_secs_f64())
 }

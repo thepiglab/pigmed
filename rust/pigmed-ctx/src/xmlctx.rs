@@ -270,6 +270,20 @@ fn caption_text(n: Option<Node>) -> String {
     parts.join(" ")
 }
 
+/// Query text of a sentence: reference markers already removed; parentheticals that only point at figures, tables
+/// or supplements ("(Figure 1A)", "( and Figure S1)", "(see Table 2)") removed; call-outs that are part of the
+/// sentence ("Figure 4B, C illustrates ...") kept, since removing them breaks the grammar.
+pub fn plain_mention(s: &str) -> String {
+    static P: OnceLock<Regex> = OnceLock::new();
+    // a parenthetical made only of connectives and call-outs: "(Figure 1A)", "( and Figure S1)", "(see Table 2 and
+    // Fig. 3B, C)"; anything with other words ("(e.g. in Fig. 1 of a review)") is real text and stays
+    let re = P.get_or_init(|| Regex::new(concat!(
+        r"(?i)\s*\(\s*(?:(?:see|also|and|or|cf\.|e\.g\.,?|i\.e\.,?|,|;|&)\s*)*",
+        r"(?:(?:supplementary|suppl\.?|extended data|additional file)?\s*(?:fig(?:ure)?s?\.?|tables?|appendix|movie|video|panel)",
+        r"\s*[a-z]?\d*[a-z]?(?:\s*[-,\u{2013}]\s*[a-z]?\d*[a-z]?)*\s*(?:(?:and|or|,|;|&)\s*)*)+\)")).unwrap());
+    cleanup(&re.replace_all(s, ""))
+}
+
 fn section_path(n: Node) -> String {
     n.ancestors().filter(|a| a.is_element() && matches!(name(a), "sec" | "app")).collect::<Vec<_>>().into_iter().rev()
         .map(|s| { let t = text(child(s, "title")); if t.is_empty() { "Untitled".to_string() } else { t } })
@@ -341,7 +355,7 @@ pub fn parse(xml: &str, article_id: &str) -> Result<Ctx> {
             if text.split_whitespace().count() < 3 {
                 continue;
             }
-            let plain = without(&chars, &f.spans, a, b, &["bibr", "fig", "table", "supplementary-material"]);
+            let plain = plain_mention(&without_refs(&chars, &f.spans, a, b));
             ctx.sentences.push(Sent { para: if pidx == usize::MAX { pi } else { pidx }, section: section.clone(), text, plain, bibr, figs });
         }
     }
@@ -388,6 +402,14 @@ mod tests {
         assert!(c.paragraphs[0].text.contains("Infarct volume fell") && c.paragraphs[0].figs == vec!["f1"]);
         // text inside a figure caption is never body prose
         assert!(c.sentences.iter().all(|s| !s.text.contains("Mean ± SD")));
+    }
+
+    #[test]
+    fn plain_mentions() {
+        assert_eq!(plain_mention("Seedling growth was inhibited ( and Figure S1)."), "Seedling growth was inhibited.");
+        assert_eq!(plain_mention("Growth fell (see Table 2 and Fig. 3B) in rats."), "Growth fell in rats.");
+        assert_eq!(plain_mention("Figure 4B, C illustrates the expression of DEGs."), "Figure 4B, C illustrates the expression of DEGs.");
+        assert_eq!(plain_mention("Doses (10 mg/kg) were safe."), "Doses (10 mg/kg) were safe.");
     }
 
     #[test]

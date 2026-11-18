@@ -1,0 +1,52 @@
+# PigMed query generator config, recipe v3.1e = fig.toml (v3.1d text + figure arm) + three changes from the v3.1d
+# 4-model trial read (2026-11-18):
+#   1. domain     MeSH / journal rules decide whether an article is biomedical; the LLM flag only when there is no MeSH
+#   2. lay        a quota-driven lay pass: one lay-only card on patient-relevant articles (lay was 0.4-0.7% of queries)
+#   3. fallback   no generic "expert in this article's own field" for text either: stage A's concrete role, else the
+#                 journal / MeSH field -> role map (fig.toml), else the card is dropped
+# Per-article inputs come from an article-meta table (`--article-meta`, JSONL, one row per article):
+#   {"article_id": "PMC123.1", "mesh_trees": ["C04.557.470.200", "D27.505.954.248"], "journal": "Lancet Oncol",
+#    "nlm_id": "100957246", "pub_types": ["Randomized Controlled Trial"]}
+# mesh_trees = tree numbers of all the article's MeSH descriptors; pub_types falls back to the article's own. Without the
+# table: the LLM flag + journal list decide the domain, the field map has no MeSH, and the lay pass is off.
+
+extends = "fig.toml"
+recipe = "v3.1e"
+
+[domain]
+# MeSH (primary): biomedical if any tree number starts with one of trees_any, or with one of trees_with_other while the
+# article also has a tree from another top-level category. Being on the journal list makes an article biomedical
+# whatever its MeSH says.
+trees_any = ["A", "B", "C", "D", "N", "G03", "G04", "G05", "G06", "G07", "G08", "G09", "G10", "G11", "G12"]
+trees_with_other = ["E"]
+# one journal title or NLM unique id per line (case-insensitive), next to this config (built by the retriever-data
+# session from NLM's broad subject terms); a missing file means an empty list
+journal_list = "biomedical_journals.txt"
+# no MeSH: biomedical = the LLM's `biomedical` flag OR the journal list ("llm_or_journal") | the journal list alone ("journal")
+no_mesh = "llm_or_journal"
+
+[lay]
+enabled = true
+# patient-relevant: a tree under patient_trees AND a clinical publication type, OR a tree under trees_alone
+patient_trees = ["C", "D"]
+clinical_pub_types = ["clinical trial", "randomized controlled trial", "review", "systematic review", "case reports", "practice guideline"]
+trees_alone = ["N02", "N05"]
+# share of FINAL queries from lay cards the run aims for; article_rate (share of patient-relevant articles that get the
+# card) is tuned per run from the measured yield so the lay share lands in [target_min, target_max]
+target_share = 0.12
+target_min = 0.10
+target_max = 0.15
+article_rate = 1.0
+# lay cards per patient-relevant article (one per distinct passage, at most the article's passages). One card per
+# article caps lay at ~1.7% (24.5% of train articles are patient-relevant; ~1.4 accepted queries per card, ~20.7 per
+# article); 5 (= every passage of a 5-passage article) gives ~8%, ~10% with the relaxed lay EG2 gate. Measure in the pilot.
+cards_per_article = 5
+# lay-only candidates offered (all from the lay stratum); the card is skipped when none has a patient / family need
+candidates = 3
+line = "{{id}}: passage [[{{marker}}]]; LAY CARD, candidate readers: {{readers}}. Only if a patient or a family member would really look for this article: set reader to that person and write the need about their own or their relative's health, treatment, risk or daily life that this passage answers, in plain words. Otherwise set skip true."
+
+[fallback]
+mode = "role_or_map"
+
+[filters]
+card_drop = ["off_domain", "skip", "no_reader", "doc_ref", "generic"]

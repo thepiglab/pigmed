@@ -1,0 +1,3 @@
+For each slot, write the search query this person would type for this need, in the slot's style. Write 3-25 words (keyword style: 2-6 words). The person decides which key terms to use and may misname them as their knowledge allows. Do not copy or closely paraphrase the need sentence: use at most three words in a row from it. The query text must not contain slot names. Never point at something only the article's reader knows: no "they", "this <thing>", "the lab" or "the method" unless the query names it (a study, trial or cohort may be named, e.g. "the Ningbo air pollution study"). No LaTeX.
+
+{{blocks}}

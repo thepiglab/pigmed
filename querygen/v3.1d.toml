@@ -1,0 +1,442 @@
+# PigMed query generator config: recipe v3.1d (persona-first, layout c3pf), as piloted 2026-11-18.
+#
+# This file reproduces rust/pigmed-synth v3.1d exactly; parity tests compare against it, so do not tune it here.
+# Change the recipe in querygen.toml (which `extends` this file) instead.
+#
+# Conventions
+# - Weighted lists are [[value, weight], ...] and are drawn in the order given (order matters for determinism).
+# - `when` predicates are ANDs of: roles, groups, role_contains, expertise, english, contexts, literacy; `any` = OR
+#   of nested predicates. An empty `when` always matches. Attribute rules: first matching rule wins.
+# - Strings with {{name}} are templates filled in code; template files live in templates/ next to this file.
+# - All random draws are hash-based: sha256(parts joined by U+001F), first 12 hex digits as an integer.
+
+recipe = "v3.1d"
+layouts = ["c3pf"]
+
+# ------------------------------------------------------------------------------------------------ personas
+[personas]
+seed = "v3"
+size = 20000
+# target share of personas by group (recipe §3: clinicians 30, researchers 30, students 12, lay 20, other 8)
+groups = [["clinician", 30], ["researcher", 30], ["student", 12], ["lay", 20], ["other", 8]]
+
+# role, group, expertise range [min, max] (0 none, 1 some, 2 professional, 3 specialist), weight within the group
+roles = [
+  ["general practitioner", "clinician", 2, 2, 10], ["emergency physician", "clinician", 2, 3, 6],
+  ["hospitalist", "clinician", 2, 2, 5], ["surgeon", "clinician", 2, 3, 5], ["oncologist", "clinician", 2, 3, 5],
+  ["psychiatrist", "clinician", 2, 3, 4], ["paediatrician", "clinician", 2, 3, 5], ["cardiologist", "clinician", 2, 3, 4],
+  ["nurse", "clinician", 2, 2, 12], ["nurse practitioner", "clinician", 2, 2, 5], ["pharmacist", "clinician", 2, 3, 7],
+  ["dentist", "clinician", 2, 2, 3], ["physiotherapist", "clinician", 2, 2, 3], ["midwife", "clinician", 2, 2, 3],
+  ["paramedic", "clinician", 2, 2, 3], ["dietitian", "clinician", 2, 2, 3], ["infectious disease physician", "clinician", 2, 3, 3],
+  ["wet-lab biologist", "researcher", 2, 3, 12], ["bioinformatician", "researcher", 2, 3, 7], ["epidemiologist", "researcher", 2, 3, 6],
+  ["clinical trialist", "researcher", 2, 3, 4], ["PhD student", "researcher", 1, 2, 12], ["postdoc", "researcher", 2, 3, 9],
+  ["principal investigator", "researcher", 3, 3, 6], ["biostatistician", "researcher", 2, 2, 3], ["neuroscientist", "researcher", 2, 3, 4],
+  ["immunologist", "researcher", 2, 3, 4], ["microbiologist", "researcher", 2, 3, 4], ["pharmacologist", "researcher", 2, 3, 4],
+  ["medical student", "student", 1, 2, 12], ["nursing student", "student", 1, 1, 7], ["pharmacy student", "student", 1, 1, 4],
+  ["undergraduate biology student", "student", 1, 1, 9], ["high-school student", "student", 0, 1, 4],
+  ["public-health master's student", "student", 1, 1, 3],
+  ["patient with a new diagnosis", "lay", 0, 1, 10], ["patient with a long-term condition", "lay", 0, 1, 10],
+  ["worried healthy adult", "lay", 0, 0, 5], ["parent of a sick child", "lay", 0, 1, 8], ["adult child caring for an elderly parent", "lay", 0, 1, 6],
+  ["partner of a patient", "lay", 0, 1, 4], ["pregnant person", "lay", 0, 1, 3], ["athlete", "lay", 0, 1, 2],
+  ["medical librarian", "other", 1, 2, 4], ["systematic reviewer", "other", 2, 2, 3], ["health journalist", "other", 1, 1, 4],
+  ["health policy analyst", "other", 1, 2, 3], ["pharma medical-affairs scientist", "other", 2, 3, 3], ["regulatory writer", "other", 2, 2, 2],
+  ["health-app developer", "other", 0, 1, 2], ["veterinarian", "other", 2, 2, 2], ["science teacher", "other", 1, 1, 2],
+  ["patent attorney", "other", 1, 1, 1],
+]
+
+# first language of second-language English speakers
+l1 = [["Spanish", 14], ["Portuguese", 7], ["Hindi", 8], ["Arabic", 8], ["French", 6], ["German", 5], ["Vietnamese", 4],
+  ["Tagalog", 4], ["Korean", 4], ["Swahili", 3], ["Bengali", 5], ["Russian", 5], ["Turkish", 4], ["Japanese", 4]]
+
+[[personas.attrs.age]]
+when = { roles = ["high-school student"] }
+fixed = "16-19"
+[[personas.attrs.age]]
+when = { roles = ["undergraduate biology student", "medical student", "nursing student", "pharmacy student", "PhD student"] }
+table = [["20-29", 85], ["30-44", 15]]
+[[personas.attrs.age]]
+when = { groups = ["lay"], role_contains = "elderly parent" }
+table = [["30-44", 30], ["45-64", 70]]
+[[personas.attrs.age]]
+when = { roles = ["pregnant person"] }
+table = [["20-29", 45], ["30-44", 55]]
+[[personas.attrs.age]]
+when = { groups = ["lay"] }
+table = [["16-19", 4], ["20-29", 26], ["30-44", 32], ["45-64", 28], ["65+", 10]]
+[[personas.attrs.age]]
+table = [["20-29", 12], ["30-44", 45], ["45-64", 35], ["65+", 8]]
+
+[[personas.attrs.gender]]
+when = { roles = ["pregnant person"] }
+fixed = "woman"
+[[personas.attrs.gender]]
+table = [["woman", 49], ["man", 48], ["non-binary person", 3]]
+
+[[personas.attrs.english]]
+when = { groups = ["lay"] }
+table = [["native", 62], ["fluent L2", 20], ["limited L2", 18]]
+[[personas.attrs.english]]
+table = [["native", 62], ["fluent L2", 31], ["limited L2", 7]]
+
+[[personas.attrs.first_language]]
+when = { english = ["native"] }
+fixed = ""
+[[personas.attrs.first_language]]
+table = "l1"            # the personas.l1 list
+
+[[personas.attrs.literacy]]
+when = { groups = ["lay"] }
+table = [["low", 35], ["medium", 45], ["high", 20]]
+[[personas.attrs.literacy]]
+when = { groups = ["student"], expertise = [0, 1] }
+table = [["medium", 60], ["high", 40]]
+[[personas.attrs.literacy]]
+when = { expertise = [0, 1] }
+table = [["medium", 50], ["high", 50]]
+[[personas.attrs.literacy]]
+fixed = "high"
+
+[[personas.attrs.goal]]
+when = { groups = ["lay"] }
+table = [["decide what to do for a patient or for themself", 45], ["understand how something works", 35], ["check whether a claim is true", 20]]
+[[personas.attrs.goal]]
+when = { groups = ["clinician"] }
+table = [["decide what to do for a patient", 40], ["understand how something works", 15], ["check whether a claim is true", 20],
+  ["find a method or protocol", 10], ["find a number to cite", 15]]
+[[personas.attrs.goal]]
+when = { groups = ["researcher"] }
+table = [["understand how something works", 25], ["check whether a claim is true", 10], ["find a method or protocol", 25],
+  ["gather evidence for a review, paper or grant", 25], ["find a number to cite", 15]]
+[[personas.attrs.goal]]
+table = [["decide what to do for a patient or for themself", 12], ["understand how something works", 22],
+  ["check whether a claim is true", 16], ["find a method or protocol", 14], ["gather evidence for a review, paper or grant", 14],
+  ["find a number to cite", 12]]
+
+[[personas.attrs.context]]
+when = { groups = ["lay"] }
+table = [["phone, thumb-typing", 55], ["phone, voice search", 15], ["desktop search box", 30]]
+[[personas.attrs.context]]
+when = { groups = ["researcher"] }
+table = [["desktop search box", 45], ["literature database", 45], ["phone, thumb-typing", 10]]
+[[personas.attrs.context]]
+table = [["phone, thumb-typing", 30], ["phone, voice search", 8], ["desktop search box", 42], ["literature database", 20]]
+
+# typing habits: probability of each habit by first matching rule (typos: 1 typo, or 2 with probability typo_second)
+[[personas.habits.terse]]
+when = { expertise = [2, 3] }
+p = 0.55
+[[personas.habits.terse]]
+p = 0.3
+[[personas.habits.lowercase]]
+when = { contexts = ["phone, thumb-typing"] }
+p = 0.6
+[[personas.habits.lowercase]]
+p = 0.3
+[[personas.habits.no_punct]]
+when = { contexts = ["phone, thumb-typing"] }
+p = 0.55
+[[personas.habits.no_punct]]
+p = 0.3
+[[personas.habits.typos]]
+when = { contexts = ["phone, thumb-typing"], any = [{ groups = ["lay"] }, { english = ["limited L2"] }] }
+p = 0.75
+[[personas.habits.typos]]
+when = { contexts = ["phone, thumb-typing"] }
+p = 0.45
+[[personas.habits.typos]]
+when = { any = [{ groups = ["lay"] }, { english = ["limited L2"] }] }
+p = 0.4
+[[personas.habits.typos]]
+p = 0.18
+[[personas.habits.abbrev]]
+when = { expertise = [2, 3] }
+p = 0.5
+[[personas.habits.abbrev]]
+p = 0.0
+
+[personas.habits_extra]
+typo_second = 0.3
+
+# the short card shown to the surface writer (typing habits are applied afterwards in code, so the card only
+# describes voice)
+[personas.card]
+template = "{{role}}, {{gender}}, age {{age}}; {{expertise}} in medicine/biology; {{english}}; health literacy {{literacy}}; wants to {{goal}}; searching on {{context}}; {{style}}"
+expertise = ["no background", "some background", "professional knowledge", "specialist knowledge"]
+english_native = "native English speaker"
+english_l2 = "{{level}} English, first language {{l1}}"
+l2_level = { "fluent L2" = "fluent", "limited L2" = "limited" }
+style = { terse_abbrev = "terse, uses abbreviations", terse = "terse", abbrev = "full sentences, uses abbreviations", plain = "writes in full sentences" }
+
+# ------------------------------------------------------------------------------------------------ text arm (c3pf)
+[text]
+slots_per_passage = 4             # stage-A cards per marked passage
+# persona-first: candidate readers per card, one from each stratum (v3.1c), labelled a, b, c; "none" = field expert
+candidate_strata = [["lay"], ["clinician", "student"], ["researcher", "other"]]
+reader_labels = ["a", "b", "c"]
+# v3.1d: one extra card per article on a hash-chosen passage, for a patient / carer (a) or clinician / student (b)
+health_card = true
+health_strata = 2
+styles_per_pair = 2
+min_need_words = 4                # shorter needs count as skipped
+expert_role_max_chars = 60
+fallback_role = "expert working in this article's own field"
+fallback_generic_roles = ["researcher"]
+stretch_suffix = " (has no training in this area: uses everyday words)"
+intent_types = ["fact_lookup", "result_number", "mechanism_why", "method_protocol", "comparison", "clinical_decision",
+  "contextual", "lay_question", "claim", "open_ended"]
+audience = ["clinician", "researcher", "student", "lay", "other"]
+
+[text.budget]
+cli_max_tokens_multiplier = 6     # --max-tokens is per passage; stage calls get x6, then the per-card budget
+per_card = 320
+overhead = 256
+cap = 16000
+
+[text.templates]
+system_a = "system_a.txt"
+system_b = "system_b.txt"
+stage_a = "stage_a.txt"
+stage_b = "stage_b.txt"
+stage_b_block = "stage_b_block.txt"
+need_rules = "need_rules.txt"
+type_defs = "type_defs.txt"
+reader_rules = "reader_rules.txt"
+passage_rule = "Cards for different people on the same passage should differ when their needs differ."
+card_line = "{{id}}: passage [[{{marker}}]]; candidate readers: {{readers}}. Set reader to the one most likely to actually read THIS article and have a need this passage answers, or none if none of them plausibly would (then name the expert_role of a real professional who would); write that reader's need."
+health_line = "{{id}}: passage [[{{marker}}]]; HEALTH CARD, candidate readers: {{readers}}. Only if this is a clinical or health article that a patient, carer or clinician would really read: set reader to that person and write the need they would have that this passage answers. Otherwise set skip true."
+reader = "({{label}}) {{card}}"
+slot_line = "  {{bid}} style={{style}}: {{desc}}{{hint}}"
+hint = " ({{hint}})"
+no_persona = "a person searching the biomedical literature"
+
+# ------------------------------------------------------------------------------------------------ surface styles
+# allowed: OR of clauses; a clause is an AND of min_expertise, max_expertise, groups, english_not, literacy_not,
+# stretch. No clause = allowed for everyone. register = the research doc's register bucket (reporting only).
+[[styles]]
+name = "expert_terse"
+weight = 14
+register = "professional"
+desc = "a professional's terse search string, with technical terms and maybe abbreviations, no question words"
+allowed = [{ min_expertise = 2, stretch = false }]
+max_words = 15
+[[styles]]
+name = "natural_question"
+weight = 24
+register = "professional"
+desc = "a plain question in this person's own words (not the need's wording)"
+[[styles]]
+name = "keyword"
+weight = 16
+register = "professional"
+desc = "2-5 search terms this person would know, typed into a search box: no question, no sentence"
+allowed = [{ min_expertise = 1, stretch = false }]
+max_words = 7
+no_question_mark = true
+[[styles]]
+name = "lay_paraphrase"
+weight = 14
+register = "lay"
+desc = "everyday words instead of jargon (\"water pill\" not \"diuretic\"), as a non-expert would say it"
+allowed = [{ max_expertise = 1 }, { literacy_not = ["high"] }, { stretch = true }]
+[[styles]]
+name = "half_remembered"
+weight = 7
+register = "partial_recall"
+desc = "the person only half-remembers it: vague or partly wrong details, still clearly the same need"
+hints = "hedges"
+[[styles]]
+name = "scenario"
+weight = 8
+register = "professional"
+desc = "one or two sentences about the person's own situation (no names), then what they want to know"
+allowed = [{ groups = ["clinician", "lay", "student"] }]
+hints = "scenes"
+[[styles]]
+name = "non_native"
+weight = 12
+register = "messy"
+desc = "written by this person in English as a second language: visible slips typical of their first language (missing or wrong articles, wrong prepositions or tense, unusual word order), still understandable"
+allowed = [{ english_not = ["native"] }]
+weight_mult = [{ when = { english = ["limited L2"] }, mult = 2 }]
+hints = "l2"
+[[styles]]
+name = "instruction"
+weight = 8
+register = "instruction"
+desc = "the search plus the given constraint on what to return, as people add to a search box"
+allowed = [{ min_expertise = 1 }]
+requires_constraint = true
+hints = "constraint"
+
+[hints]
+constraint = "add this constraint (true of what they want; keep its meaning): {{constraint}}"
+l2 = "make at least two slips typical of a {{speaker}} speaker: {{slips}}; never perfect English"
+l2_unknown_speaker = "second-language"
+hedges = ["begin with \"that\" or \"the one\" (\"that drug that...\")", "include one detail the person is unsure of, with a question mark",
+  "put \"something about\" in the middle, not at the start", "\"was it X or Y\"", "no hedge words: just a vague, incomplete description",
+  "end with \"can't remember the name\" or similar", "\"I think\" or \"think it's called\" after the key term"]
+scenes = ["begin with \"my\" (my mother, my patient, my lab...)", "begin with the situation (\"after...\", \"since...\", \"we have...\")",
+  "begin with the question, then one clause about the situation", "begin with the person's role (\"nurse here,\", \"PhD student,\")",
+  "begin with \"our\" (our clinic, our team...)"]
+# v3.1d: scenario openers for patients and family: their own life, never a clinic, team or lab
+lay_scenes = ["begin with \"my\" (my mum, my son, my doctor said...)", "begin with their situation (\"since my diagnosis...\", \"after the surgery...\")",
+  "begin with the question, then one clause about their situation", "begin with \"I\" and their own situation (\"I have...\", \"I'm caring for...\")"]
+lay_scene_groups = ["lay"]
+
+# typical English-as-a-second-language slips by first language (v3.1b)
+[[hints.l2_slips]]
+l1 = ["Spanish", "Portuguese", "French"]
+slips = "extra or wrong articles (\"the diabetes\"), adjective after the noun, false friends (\"actual\" for current, \"realize a study\"), \"make\" for \"do\""
+[[hints.l2_slips]]
+l1 = ["Hindi", "Bengali", "Tagalog"]
+slips = "wrong prepositions (\"discuss about\", \"effect for\"), progressive verbs (\"is having\"), dropped or extra articles, \"itself\"/\"only\" for emphasis"
+[[hints.l2_slips]]
+l1 = ["Arabic", "Turkish", "Swahili"]
+slips = "dropped \"is/are\", wrong prepositions, missing articles, question without inversion (\"why the drug cause...\")"
+[[hints.l2_slips]]
+l1 = ["Vietnamese", "Korean", "Japanese"]
+slips = "missing articles and plural -s, no past tense, topic first (\"diabetes, which drug better\")"
+[[hints.l2_slips]]
+l1 = ["Russian", "German"]
+slips = "missing articles, unusual word order (verb late), \"since 3 years\", literal phrasing"
+[[hints.l2_slips]]
+l1 = []
+slips = "missing articles, wrong prepositions, unusual word order"
+
+# ------------------------------------------------------------------------------------------------ instruction constraints
+# Constraints true of the article by construction (corpus metadata from annotate-articles, and the title), v3.1 fix 6.
+# A rule fires when any of pub_types_any (substring of a lowercased PubMed publication type) or article_types_any
+# (JATS article-type) matches, and article_type_is / pub_types_none hold. Rules with the same `exclusive` name: only
+# the first that fires adds its constraints.
+[[constraints.meta]]
+pub_types_any = ["randomized controlled trial"]
+add = ["only RCTs", "randomized trials only"]
+[[constraints.meta]]
+exclusive = "review"
+pub_types_any = ["meta-analysis", "systematic review"]
+article_types_any = ["systematic-review"]
+add = ["systematic reviews or meta-analyses only"]
+[[constraints.meta]]
+exclusive = "review"
+pub_types_any = ["review"]
+article_types_any = ["review-article"]
+add = ["reviews only"]
+[[constraints.meta]]
+pub_types_any = ["case reports"]
+article_types_any = ["case-report"]
+add = ["case reports"]
+[[constraints.meta]]
+article_type_is = "research-article"
+pub_types_none = ["review"]
+add = ["original research, not reviews", "primary studies only"]
+[[constraints.meta]]
+pub_types_any = ["observational study"]
+add = ["observational studies"]
+
+[constraints.year]
+min = 1990
+max = 2100
+# (prefix, offset from the publication year)
+forms = [["since", 0], ["since", -1], ["since", -3], ["published after", -2]]
+
+# title rules in order; a rule fires if its regex matches the title or any rule in also_if fired, unless a rule in
+# unless fired
+[[constraints.title]]
+name = "kid"
+regex = '''(?i)\b(child|children|childhood|pa?ediatric|infants?|neonat\w*|adolescen\w*)\b'''
+add = "in children"
+[[constraints.title]]
+name = "mouse"
+regex = '''(?i)\b(mice|mouse|murine)\b'''
+add = "mouse studies"
+[[constraints.title]]
+name = "rat"
+regex = '''(?i)\brats?\b'''
+add = "rat studies"
+[[constraints.title]]
+name = "human"
+regex = '''(?i)\b(patients?|clinical|adults?|women|men|humans?)\b'''
+also_if = ["kid"]
+unless = ["mouse", "rat"]
+add = "human studies"
+
+# ------------------------------------------------------------------------------------------------ filters
+# Card drops (stage A), in order: off_domain, skip, doc_ref (on the need), generic (specificity "many" or a research
+# agenda need). Query rejects (stage B), in order; the first that fires is recorded as `reject`.
+[filters]
+card_drop = ["off_domain", "skip", "doc_ref", "generic"]
+generic_specificity = ["many"]
+query_reject = ["empty", "leak", "spill", "banned", "tex", "unresolved", "local_label", "generic", "copy", "style", "duplicate", "skip"]
+min_words = 2
+copy_jaccard = 0.7
+spill_chars = ["{", "}", "\n", "\":"]
+
+[filters.regex]
+leak = '''(?i)\bp\d+\.c\d+(\.q\d+)?\b|\bslot-\d+\b'''
+doc_ref = '''(?i)\b(this|these|the present|the current|our|that) (study|studies|trial|article|paper|cohort|analysis|experiment|work|patients|participants|subjects|sample|dataset|report|review|investigation|research)\b|according to|\bthe (authors|researchers|investigators|study|trial|paper|article|passage|experiment|above|figure)\b|\bfig(ure|\.)?\s*\d|\btable\s*\d|\bpanel [a-h]\b|\b(group|arm) [a-d1-9]\b'''
+doc_ref_group = '''(?i)\bthe ((?:[a-z0-9-]+ ){0,2}[a-z0-9-]+) (group|groups|arm|arms|cohort)\b'''
+exam = '''(?i)^\s*(you (need|are|have|want|must|plan|should|were)|imagine|suppose|assume|as an? [a-z ]+, you)\b|\byou are (planning|asked|designing|tasked)\b'''
+tex = '''\$[^$]*\$|\\[a-zA-Z]+\{?|\{\\'''
+research_agenda = '''(?i)\bfuture (research|directions?|studies|work|perspectives?)\b|\bresearch (gaps?|agenda|priorities)\b|\bwhere (should|does|will) (research|the field)\b|\bnext steps (for|in) (research|the field)\b|\bwhat (further|more) research\b'''
+local_label_part = '''\b(?:[Rr]ider|[Pp]articipant|[Ss]ubject|[Pp]atient|[Cc]ase|[Vv]olunteer|[Dd]onor|[Hh]orse|[Dd]og|[Mm]ouse|[Aa]nimal|[Ss]ite|[Ww]ard|[Cc]linic|[Hh]ospital|[Ss]chool|[Vv]illage|[Hh]ousehold|[Ff]arm|[Ii]nterviewee|[Rr]espondent|[Nn]urse|[Ss]tudent|[Tt]eacher|[Cc]ohort|[Aa]rm|[Gg]roup)\s+(?:[A-Z]|\d{1,3}|[A-Z]\d{1,2}|[IVX]{1,4})\b'''
+local_label_code = '''(?i)(?:\b(strain|isolate|compound|cell line|clone|line|variant|mutant|construct|plasmid|peptide|derivative|analogue|analog|inhibitor|drug|candidate|cultivar|accession|batch|sample|formulation)\s+)?\b([A-Z]{1,2}\d{3,}[A-Za-z]?)\b'''
+unresolved_they = '''(?i)\b(did|do|does|how|why|what|where|when|which|were|have|had) they\b|\bthey (used|did|found|measured|tested|showed|reported|chose|compared|recruited|collected|analy[sz]ed)\b'''
+unresolved_this = '''(?i)\b(this|these|that|those) (fungus|bacteri\w*|virus|drug|compound|protein|gene|molecule|method|model|technique|approach|stain|assay|device|tool|cohort|sample|samples|patients|participants|mice|rats|animals|cells|lab|team|experiment|intervention|program|programme|thing|stuff)\b'''
+unresolved_the = '''(?i)\bthe ((?:[a-z-]+ ){0,2})(lab|team|group's|authors|stain|method|model|technique|approach|assay|procedure|protocol|device|tool|compound|drug|intervention|program|programme|sample|samples|dataset|data set)\b'''
+
+[filters.words]
+# "the <x> group|arm|cohort" is study-local unless <x>'s last word names a kind of population or a chemical group
+doc_ref_group_ok = ["age", "blood", "risk", "high-risk", "low-risk", "ethnic", "functional", "methyl", "phosphate", "hydroxyl",
+  "amino", "carboxyl", "support", "working", "prosthetic", "acetyl", "racial", "income", "socioeconomic", "peer", "family", "patient"]
+# "the <head>" with no modifiers is unresolved for these heads
+unresolved_bare_heads = ["lab", "team", "group's", "authors", "stain", "device", "tool", "compound", "drug", "intervention", "sample",
+  "samples", "dataset", "data set"]
+# "the <mods> <head>" is unresolved when every modifier is generic ...
+unresolved_generic_mods = ["special", "new", "novel", "same", "specific", "different", "other", "proposed", "current", "given",
+  "above", "following", "previous", "particular", "their", "this", "that", "used"]
+# ... or the first modifier points back into the paper
+unresolved_back_mods = ["special", "same", "proposed", "above", "given", "following", "previous", "aforementioned", "described", "used"]
+
+# ------------------------------------------------------------------------------------------------ typing noise (stage C)
+[noise]
+keyboard_rows = ["qwertyuiop", "asdfghjkl", "zxcvbnm"]
+misspellings = [
+  ["alzheimer's", "alzhimers"], ["alzheimer", "alzhimer"], ["metformin", "metforman"], ["diarrhea", "diarhea"],
+  ["diarrhoea", "diarea"], ["pneumonia", "neumonia"], ["ibuprofen", "ibuprofin"], ["acetaminophen", "acetominophen"],
+  ["paracetamol", "paracetemol"], ["schizophrenia", "skizophrenia"],
+  ["arrhythmia", "arythmia"], ["hemorrhage", "hemorage"], ["haemorrhage", "hemmorhage"], ["leukemia", "leukaemia"],
+  ["leukaemia", "lukemia"], ["cirrhosis", "cirosis"], ["rheumatoid", "rheumatiod"], ["osteoporosis", "osteoperosis"],
+  ["ophthalmology", "opthalmology"], ["antibiotic", "antibiotc"], ["antibiotics", "anitbiotics"], ["vaccine", "vacine"],
+  ["vaccination", "vacination"], ["diabetes", "diabeties"], ["cholesterol", "cholestrol"], ["hypertension", "hypertention"],
+  ["anxiety", "anxeity"], ["seizure", "siezure"], ["seizures", "siezures"], ["prescription", "perscription"],
+  ["ultrasound", "ultra sound"], ["psoriasis", "sorisis"], ["eczema", "exzema"], ["asthma", "asthama"],
+  ["chemotherapy", "chemo therapy"], ["immunotherapy", "immuno therapy"], ["thyroid", "thyriod"], ["migraine", "migrane"],
+  ["tylenol", "tylenal"], ["gabapentin", "gabapenten"], ["warfarin", "warfirin"],
+  ["colonoscopy", "colonscopy"], ["parkinson's", "parkinsons"], ["parkinson", "parkinsons"], ["sepsis", "sepsys"],
+]
+punct_removed = "?.,;:!\""
+
+# ------------------------------------------------------------------------------------------------ modality targets
+# What a query is looking for. v3.1d is text-only.
+[modality]
+targets = [
+  { name = "text_passage", share = 1.0, query = "text", status = "active" },
+  { name = "figure", share = 0.0, query = "text", status = "off" },
+  { name = "figure_composed", share = 0.0, query = "image+text", status = "off" },
+  { name = "table", share = 0.0, query = "text", status = "reserved: needs table units in the chunker" },
+  { name = "supplement", share = 0.0, query = "text", status = "reserved: needs supplement units" },
+  { name = "video", share = 0.0, query = "text", status = "reserved" },
+  { name = "audio", share = 0.0, query = "text", status = "reserved: no audio-capable generator in the approved set" },
+]
+
+# ------------------------------------------------------------------------------------------------ gates (EG2 round trip)
+[gates]
+eg2_query_prefix = "task: search result | query: "
+[[gates.rules]]
+modality = "text_passage"
+styles = ["expert_terse", "keyword", "natural_question", "scenario", "instruction"]
+keep = "source chunk in top-3"
+[[gates.rules]]
+modality = "text_passage"
+styles = ["lay_paraphrase", "half_remembered", "non_native"]
+keep = "source article in top-10"

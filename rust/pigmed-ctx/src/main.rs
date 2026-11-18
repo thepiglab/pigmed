@@ -10,8 +10,10 @@
 mod cite;
 mod fetch;
 mod io;
+mod mesh;
 mod shard;
 mod units;
+mod vec;
 mod xmlctx;
 
 use anyhow::Result;
@@ -71,6 +73,36 @@ enum Cmd {
         #[arg(long)] limit: Option<usize>,
         #[arg(long)] local: Option<PathBuf>,
     },
+    /// Published v2 image vectors of a shard's figures, flashembed layout (S3 teacher / miner)
+    Figvec {
+        #[arg(long)] figures: PathBuf,
+        /// published vectors/<shard>.parquet
+        #[arg(long)] vectors: PathBuf,
+        #[arg(long)] out: PathBuf,
+    },
+    /// Per-article MeSH tree numbers / journal / publication types (recipe v3.1e --article-meta)
+    ArticleMesh {
+        /// articles.jsonl (article_id per row) or a list of ids
+        #[arg(long)] articles: PathBuf,
+        /// full-corpus records.jsonl.gz (article_id -> pmid, journal, pub_types)
+        #[arg(long)] records: PathBuf,
+        /// directory of PubMed JSONL(.gz) parts with pmid, mesh (descriptor UIs), journal, pub_types
+        #[arg(long)] pubmed: PathBuf,
+        /// NLM MeSH descriptor files descYYYY.xml(.gz), NEWEST FIRST (older years map retired descriptors)
+        #[arg(long, num_args = 1..)] desc: Vec<PathBuf>,
+        #[arg(long)] out: PathBuf,
+    },
+    /// Biomedical journal list for querygen [domain].journal_list, derived from PubMed MeSH
+    JournalList {
+        #[arg(long)] pubmed: PathBuf,
+        /// descYYYY files, newest first
+        #[arg(long, num_args = 1..)] desc: Vec<PathBuf>,
+        /// corpus records.jsonl.gz (nlm_ta -> full journal title)
+        #[arg(long)] records: Option<PathBuf>,
+        #[arg(long, default_value_t = 20)] min_n: usize,
+        #[arg(long, default_value_t = 0.6)] min_share: f64,
+        #[arg(long)] out: PathBuf,
+    },
     /// Debug: parsed JATS context (figures, refs, cited sentences) of one file
     XmlCtx {
         #[arg(long)] xml: PathBuf,
@@ -98,6 +130,15 @@ fn main() -> Result<()> {
         Cmd::FetchFigs { figures, out, max_side, quality, threads, limit, local } => {
             let a = fetch::FetchArgs { figures, out, max_side, quality, threads, limit, local };
             println!("{}", serde_json::to_string_pretty(&fetch::run(&a)?)?);
+        }
+        Cmd::Figvec { figures, vectors, out } => {
+            println!("{}", vec::figvec(&figures, &vectors, &out)?);
+        }
+        Cmd::ArticleMesh { articles, records, pubmed, desc, out } => {
+            println!("{}", mesh::build(&articles, &records, &pubmed, &desc, &out)?);
+        }
+        Cmd::JournalList { pubmed, desc, records, min_n, min_share, out } => {
+            println!("{}", mesh::journal_list(&pubmed, &desc, records.as_deref(), min_n, min_share, &out)?);
         }
         Cmd::XmlCtx { xml, article_id } => {
             use std::io::Read;

@@ -68,6 +68,8 @@ def late_windows(tk, text, prefix, spans, wmax=8192, overlap=1024):
     head = [ids[k] for k in range(lead)] + [ids[k] for k in hdr]
     tail = [ids[k] for k in range(n - trail, n)]
     cap = wmax - len(head) - len(tail)
+    if cap < max(8, wmax // 8):  # 1k of an 8k window
+        raise ValueError(f"header of {len(head)} tokens leaves {cap} of a {wmax}-token window (cap the abstract)")
     ov = min(overlap, cap // 2)
     stride = cap - ov
     starts = [0]
@@ -94,10 +96,14 @@ def late_windows(tk, text, prefix, spans, wmax=8192, overlap=1024):
         out.append((w, len(head) + x0 - s0, len(head) + x1 - s0))
     return wins, out
 
-def article_input(title: str, abstract: str, chunks: list[dict], sep: str = "\n\n") -> dict:
+def article_input(title: str, abstract: str, chunks: list[dict], sep: str = "\n\n",
+                  max_header_chars: int = 4000) -> dict:
     """chunks: [{"id", "text", "heading"?}] in reading order (heading = the section heading, given on every chunk) -> {"text", "prefix_chars", "spans": [{"id","start","end"}]}
     (flashembed text_late row format). The header (prompt + title + abstract) is context only, never pooled."""
-    head = ARTICLE_PROMPT.format(title=(title or "none").strip()) + (abstract or "").strip()
+    abstract = (abstract or "").strip()
+    if len(abstract) > max_header_chars:  # the header repeats in every window: cap it (~1k tokens), at a word break
+        abstract = abstract[:max_header_chars].rsplit(" ", 1)[0] + " ..."
+    head = ARTICLE_PROMPT.format(title=(title or "none").strip()[:500]) + abstract
     text = head + sep
     prefix = len(text)
     spans = []

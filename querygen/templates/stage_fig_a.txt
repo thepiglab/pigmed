@@ -1,0 +1,14 @@
+Article title: {{title}}
+Abstract (context only): {{abstract}}
+Figure caption: {{caption}}
+Text that cites the figure:
+{{citing}}
+
+The image is this figure. First set biomedical (true if the article is about human or animal health, medicine, biology, biomedical science or public health; false otherwise), figure_kind (the closest kind from the list below) and legible (true if the image is clear enough that someone could recognise what it shows).
+
+Write one figure need card per line below.
+{{card_lines}}
+
+{{reader_rules}}{{need_rules}}
+{{card_defs}}
+FIGURE KINDS: {{kinds}}

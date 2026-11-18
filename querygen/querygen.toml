@@ -1,0 +1,165 @@
+# PigMed query generator config, recipe v3.2 = v3.1e (domain rule, lay pass, field->role fallback; `extends`)
+# + wider personas. Spec: docs/QUERYGEN_SPEC.md. Chain: v3.1d.toml <- fig.toml <- v3.1e.toml <- querygen.toml.
+#
+# Merge rule for `extends`: tables merge key by key; any key given here (arrays included) replaces the parent's.
+# `personas.extra_roles` is appended to the parent's roles.
+
+extends = "v3.1e.toml"
+recipe = "v3.2"
+
+# ------------------------------------------------------------------------------------------------ wider personas
+[personas]
+# more first languages (people, not models: every L1 is fine)
+l1 = [["Spanish", 14], ["Portuguese", 7], ["Hindi", 8], ["Arabic", 8], ["French", 6], ["German", 5], ["Vietnamese", 4],
+  ["Tagalog", 4], ["Korean", 4], ["Swahili", 3], ["Bengali", 5], ["Russian", 5], ["Turkish", 4], ["Japanese", 4],
+  ["Mandarin", 9], ["Cantonese", 2], ["Urdu", 4], ["Persian", 3], ["Polish", 3], ["Italian", 3], ["Indonesian", 3],
+  ["Thai", 2], ["Ukrainian", 2], ["Tamil", 2], ["Telugu", 2], ["Yoruba", 2], ["Hausa", 1], ["Igbo", 1], ["Amharic", 1],
+  ["Somali", 1], ["Nepali", 1], ["Malay", 1], ["Dutch", 2], ["Greek", 1], ["Romanian", 1]]
+
+extra_roles = [
+  # clinicians
+  ["junior doctor (resident)", "clinician", 2, 2, 7], ["anaesthetist", "clinician", 2, 3, 3], ["radiologist", "clinician", 2, 3, 4],
+  ["pathologist", "clinician", 2, 3, 3], ["dermatologist", "clinician", 2, 3, 3], ["neurologist", "clinician", 2, 3, 3],
+  ["obstetrician-gynaecologist", "clinician", 2, 3, 3], ["endocrinologist", "clinician", 2, 3, 2], ["gastroenterologist", "clinician", 2, 3, 2],
+  ["nephrologist", "clinician", 2, 3, 2], ["rheumatologist", "clinician", 2, 3, 2], ["pulmonologist", "clinician", 2, 3, 2],
+  ["geriatrician", "clinician", 2, 3, 2], ["intensive care physician", "clinician", 2, 3, 3], ["ophthalmologist", "clinician", 2, 3, 2],
+  ["orthopaedic surgeon", "clinician", 2, 3, 2], ["ENT surgeon", "clinician", 2, 3, 1], ["public health physician", "clinician", 2, 3, 2],
+  ["clinical psychologist", "clinician", 2, 3, 3], ["occupational therapist", "clinician", 2, 2, 2], ["speech and language therapist", "clinician", 2, 2, 1],
+  ["radiographer", "clinician", 2, 2, 2], ["sonographer", "clinician", 2, 2, 1], ["clinical laboratory scientist", "clinician", 2, 3, 3],
+  ["respiratory therapist", "clinician", 2, 2, 1], ["optometrist", "clinician", 2, 2, 1], ["genetic counsellor", "clinician", 2, 3, 1],
+  ["intensive care nurse", "clinician", 2, 3, 3], ["care home nurse", "clinician", 2, 2, 2], ["school nurse", "clinician", 2, 2, 1],
+  ["community health worker", "clinician", 1, 2, 2], ["veterinary nurse", "clinician", 2, 2, 1],
+  # researchers
+  ["cell biologist", "researcher", 2, 3, 4], ["cancer biologist", "researcher", 2, 3, 4], ["geneticist", "researcher", 2, 3, 4],
+  ["structural biologist", "researcher", 2, 3, 2], ["computational biologist", "researcher", 2, 3, 3], ["virologist", "researcher", 2, 3, 2],
+  ["parasitologist", "researcher", 2, 3, 1], ["toxicologist", "researcher", 2, 3, 2], ["medicinal chemist", "researcher", 2, 3, 2],
+  ["biomedical engineer", "researcher", 2, 3, 3], ["medical physicist", "researcher", 2, 3, 1], ["health economist", "researcher", 2, 3, 2],
+  ["qualitative health researcher", "researcher", 2, 3, 2], ["behavioural scientist", "researcher", 2, 3, 2], ["nutrition scientist", "researcher", 2, 3, 2],
+  ["exercise physiologist", "researcher", 2, 3, 2], ["global health researcher", "researcher", 2, 3, 2], ["environmental health scientist", "researcher", 2, 3, 2],
+  ["veterinary researcher", "researcher", 2, 3, 2], ["plant biologist", "researcher", 2, 3, 1], ["ecologist", "researcher", 2, 3, 1],
+  ["machine-learning researcher in health", "researcher", 1, 2, 3], ["research nurse", "researcher", 2, 2, 2],
+  ["lab technician", "researcher", 1, 2, 4], ["research assistant", "researcher", 1, 2, 3],
+  # students
+  ["biomedical science undergraduate", "student", 1, 1, 5], ["dental student", "student", 1, 1, 3], ["physiotherapy student", "student", 1, 1, 2],
+  ["veterinary student", "student", 1, 2, 2], ["paramedic student", "student", 1, 1, 1], ["psychology undergraduate", "student", 0, 1, 3],
+  ["nutrition student", "student", 1, 1, 1], ["bioinformatics master's student", "student", 1, 2, 2],
+  ["international medical graduate preparing for licensing exams", "student", 2, 2, 2],
+  # lay
+  ["older adult managing several medicines", "lay", 0, 1, 5], ["new parent", "lay", 0, 1, 4], ["person going through IVF", "lay", 0, 1, 2],
+  ["person who just got a test result", "lay", 0, 1, 4], ["person with a mental health condition", "lay", 0, 1, 4],
+  ["person with chronic pain", "lay", 0, 1, 3], ["cancer survivor", "lay", 0, 1, 3], ["person with a disability", "lay", 0, 1, 2],
+  ["carer of a disabled adult", "lay", 0, 1, 2], ["teenager looking up symptoms", "lay", 0, 0, 2], ["gym-goer interested in supplements", "lay", 0, 1, 3],
+  ["person trying to quit smoking", "lay", 0, 0, 2], ["traveller planning a trip abroad", "lay", 0, 0, 1], ["pet owner", "lay", 0, 1, 2],
+  ["farmer or livestock keeper", "lay", 0, 1, 1], ["person living with HIV", "lay", 0, 1, 1], ["retired nurse", "lay", 1, 2, 1],
+  # other professionals
+  ["patient advocate", "other", 1, 1, 3], ["public health officer", "other", 1, 2, 3], ["clinical research coordinator", "other", 1, 2, 3],
+  ["hospital administrator", "other", 1, 1, 2], ["NGO programme manager", "other", 1, 1, 2], ["medical device engineer", "other", 1, 2, 2],
+  ["science writer", "other", 1, 1, 2], ["medical translator", "other", 1, 1, 2], ["medical illustrator", "other", 1, 1, 1],
+  ["insurance medical reviewer", "other", 2, 2, 1], ["medical-malpractice lawyer", "other", 1, 1, 1], ["clinical coder", "other", 1, 1, 1],
+  ["fitness coach", "other", 0, 1, 2], ["food safety inspector", "other", 1, 1, 1], ["agricultural extension officer", "other", 1, 1, 1],
+  ["laboratory animal technician", "other", 1, 2, 1], ["biotech business analyst", "other", 1, 2, 1], ["health AI product manager", "other", 0, 1, 1],
+]
+
+[[personas.attrs.age]]
+when = { roles = ["high-school student", "teenager looking up symptoms"] }
+fixed = "16-19"
+[[personas.attrs.age]]
+when = { roles = ["retired nurse"] }
+fixed = "65+"
+[[personas.attrs.age]]
+when = { roles = ["undergraduate biology student", "medical student", "nursing student", "pharmacy student", "PhD student",
+  "biomedical science undergraduate", "dental student", "physiotherapy student", "veterinary student", "paramedic student",
+  "psychology undergraduate", "nutrition student"] }
+table = [["20-29", 85], ["30-44", 15]]
+[[personas.attrs.age]]
+when = { groups = ["lay"], role_contains = "elderly parent" }
+table = [["30-44", 30], ["45-64", 70]]
+[[personas.attrs.age]]
+when = { roles = ["pregnant person", "new parent"] }
+table = [["20-29", 45], ["30-44", 55]]
+[[personas.attrs.age]]
+when = { roles = ["person going through IVF"] }
+table = [["20-29", 20], ["30-44", 75], ["45-64", 5]]
+[[personas.attrs.age]]
+when = { roles = ["older adult managing several medicines"] }
+table = [["45-64", 20], ["65+", 80]]
+[[personas.attrs.age]]
+when = { groups = ["lay"] }
+table = [["16-19", 4], ["20-29", 24], ["30-44", 30], ["45-64", 28], ["65+", 14]]
+[[personas.attrs.age]]
+table = [["20-29", 12], ["30-44", 45], ["45-64", 35], ["65+", 8]]
+
+# literacy: lay roles with health training keep high literacy (a retired nurse is not "low")
+[[personas.attrs.literacy]]
+when = { roles = ["retired nurse"] }
+fixed = "high"
+[[personas.attrs.literacy]]
+when = { groups = ["lay"] }
+table = [["low", 35], ["medium", 45], ["high", 20]]
+[[personas.attrs.literacy]]
+when = { groups = ["student"], expertise = [0, 1] }
+table = [["medium", 60], ["high", 40]]
+[[personas.attrs.literacy]]
+when = { expertise = [0, 1] }
+table = [["medium", 50], ["high", 50]]
+[[personas.attrs.literacy]]
+fixed = "high"
+
+# goals: lay people also prepare for appointments and want to see what something looks like (figure needs)
+[[personas.attrs.goal]]
+when = { groups = ["lay"] }
+table = [["decide what to do for a patient or for themself", 35], ["understand how something works", 25], ["check whether a claim is true", 15],
+  ["prepare questions for a doctor's appointment", 13], ["see what something looks like", 12]]
+[[personas.attrs.goal]]
+when = { groups = ["clinician"] }
+table = [["decide what to do for a patient", 36], ["understand how something works", 13], ["check whether a claim is true", 18],
+  ["find a method or protocol", 9], ["find a number to cite", 13], ["find an image to show a patient or colleague", 11]]
+[[personas.attrs.goal]]
+when = { groups = ["researcher"] }
+table = [["understand how something works", 22], ["check whether a claim is true", 9], ["find a method or protocol", 22],
+  ["gather evidence for a review, paper or grant", 22], ["find a number to cite", 13], ["compare a figure with their own results", 12]]
+[[personas.attrs.goal]]
+table = [["decide what to do for a patient or for themself", 10], ["understand how something works", 20],
+  ["check whether a claim is true", 15], ["find a method or protocol", 12], ["gather evidence for a review, paper or grant", 13],
+  ["find a number to cite", 10], ["find an image or diagram to explain something", 12], ["see what something looks like", 8]]
+
+[[personas.attrs.context]]
+when = { groups = ["lay"] }
+table = [["phone, thumb-typing", 55], ["phone, voice search", 15], ["desktop search box", 30]]
+[[personas.attrs.context]]
+when = { groups = ["researcher"] }
+table = [["desktop search box", 45], ["literature database", 45], ["phone, thumb-typing", 10]]
+[[personas.attrs.context]]
+when = { roles = ["high-school student", "psychology undergraduate"] }
+table = [["phone, thumb-typing", 60], ["desktop search box", 35], ["phone, voice search", 5]]
+[[personas.attrs.context]]
+when = { groups = ["student"] }
+table = [["phone, thumb-typing", 42], ["desktop search box", 40], ["literature database", 13], ["phone, voice search", 5]]
+[[personas.attrs.context]]
+when = { groups = ["clinician"] }
+table = [["phone, thumb-typing", 30], ["hospital workstation between patients", 22], ["desktop search box", 28], ["literature database", 14],
+  ["phone, voice search", 6]]
+[[personas.attrs.context]]
+table = [["phone, thumb-typing", 30], ["phone, voice search", 8], ["desktop search box", 42], ["literature database", 20]]
+
+[[hints.l2_slips]]
+l1 = ["Spanish", "Portuguese", "French", "Italian", "Romanian"]
+slips = "extra or wrong articles (\"the diabetes\"), adjective after the noun, false friends (\"actual\" for current, \"realize a study\"), \"make\" for \"do\""
+[[hints.l2_slips]]
+l1 = ["Hindi", "Bengali", "Tagalog", "Urdu", "Nepali", "Tamil", "Telugu"]
+slips = "wrong prepositions (\"discuss about\", \"effect for\"), progressive verbs (\"is having\"), dropped or extra articles, \"itself\"/\"only\" for emphasis"
+[[hints.l2_slips]]
+l1 = ["Arabic", "Turkish", "Swahili", "Persian", "Somali", "Amharic"]
+slips = "dropped \"is/are\", wrong prepositions, missing articles, question without inversion (\"why the drug cause...\")"
+[[hints.l2_slips]]
+l1 = ["Vietnamese", "Korean", "Japanese", "Mandarin", "Cantonese", "Thai", "Indonesian", "Malay"]
+slips = "missing articles and plural -s, no past tense, topic first (\"diabetes, which drug better\")"
+[[hints.l2_slips]]
+l1 = ["Russian", "German", "Polish", "Ukrainian", "Dutch", "Greek"]
+slips = "missing articles, unusual word order (verb late), \"since 3 years\", literal phrasing"
+[[hints.l2_slips]]
+l1 = ["Yoruba", "Hausa", "Igbo"]
+slips = "uncountable nouns made plural (\"informations\", \"researches\"), dropped articles, \"is it\" as a tag question, \"been\" for past tense"
+[[hints.l2_slips]]
+l1 = []
+slips = "missing articles, wrong prepositions, unusual word order"

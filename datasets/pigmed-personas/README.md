@@ -406,6 +406,15 @@ Rejects in v3.1 (9,543 of 29,436 slots): writer skipped 6,347; copy of the need 
 text 359; doc-referential or exam 228; style violated 133; duplicate 116; leaked id 2. Card drops: 14,718 kept of
 19,952; generic 3,014; doc-referential 1,665; skipped 555.
 
+## Release notes
+
+- **Supersedes `pigmed-synth-queries`** (recipes v1/v2, generator-comparison benchmark). That dataset was **public from
+  2026-11-17 07:46 UTC until about 2026-11-18 08:13 UTC**, when it was made private; it remains the private record of the generator
+  benchmark. It contained queries for **all** article splits, including dev, test, test_temporal, test_journal and
+  eval_reserved, and rows from non-commercial articles. **Contamination risk:** queries written for those held-out
+  articles were publicly downloadable during that window, so any evaluation on those articles may be affected if a
+  model was trained on that public copy. This dataset contains train-split, commercial-use rows only.
+
 ## Provenance and licence
 
 - **Source passages:** PubMed Central Open Access articles with a **commercial-use licence only** (CC0, CC BY,

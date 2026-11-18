@@ -171,3 +171,52 @@ def test_figures_eval_runs_on_cpu(tiny, tmp_path, monkeypatch):
         for h in ("dense", "late"):
             assert 0.0 <= res[k][h]["R@1"] <= res[k][h]["R@10"] <= 1.0
     assert res["caption->figure"]["dense"]["R@10"] == 1.0  # 6 candidates: everything is in the top 10
+
+
+def test_prep_figs_build_mine_mentions(tiny, tmp_path):
+    """pigmed-ctx figure shards -> prep_figs build -> mine.py -> prep_figs mentions -> both load as train_s1 sources."""
+    import gzip
+    import json
+    import subprocess
+    import sys
+    import numpy as np
+    from PIL import Image
+    from eg2late import train_s1 as ts
+    from eg2late.model import Tok
+    g = np.random.default_rng(0)
+    for s in ("pmcv2-a-00001", "pmcv2-b-00002"):
+        d = tmp_path / "ctx" / "shards" / s
+        (d / "img").mkdir(parents=True)
+        ids = []
+        with gzip.open(d / "figures.jsonl.gz", "wt") as f:
+            for i in range(6):
+                fid = f"{s}-f{i}"
+                ids.append(fid)
+                Image.fromarray(g.integers(0, 255, (40, 60, 3), dtype=np.uint8)).save(d / "img" / f"{i}.jpg")
+                f.write(json.dumps({"id": fid, "article_id": f"{s}-a{i // 2}", "group": f"{s}-g{i // 2}",
+                                    "md5": "dup" if i in (0, 1) else f"{s}{i}",
+                                    "image": f"img/{i}.jpg", "caption": f"Figure {i}. western blot of sample {i}",
+                                    "mentions": [f"as the blot in Figure {i} shows, the band is clearly visible"]}) + "\n")
+        for sub in ("figvec", "capvec"):
+            (d / sub).mkdir()
+            np.save(d / sub / "embeddings.dense.npy", g.standard_normal((6, 768)).astype(np.float16))
+            (d / sub / "embeddings.ids.json").write_text(json.dumps(ids))
+    out = tmp_path / "data"
+    run = lambda *x: subprocess.run([sys.executable, "-m", *x], check=True, capture_output=True, text=True).stdout  # noqa: E731
+    st = json.loads(run("eg2late.prep_figs", "build", "--ctx", str(tmp_path / "ctx"), "--out", str(out), "--check-images"))
+    assert st["figures"] == 12 and st["caption_queries"] == 12
+    run("eg2late.mine", "--src", str(out / "pmc_fig_caption"), "--top", "8", "--perc", "1.5", "--keep", "4")
+    st = json.loads(run("eg2late.prep_figs", "mentions", "--out", str(out)))
+    assert st["mentions"] == 12
+    a = _a(tiny)
+    for name in ("pmc_fig_caption", "pmc_fig_mention"):
+        src = ts.Source(out / name, None, 0)
+        assert src.symmetric and src.store.is_image and len(src) == 12
+        b = ts.Batches([src], ts.make_plan([src], 2, 0), Tok(tiny), a)[0]
+        assert b["d"]["pixel_values"].shape[0] == 6
+        assert (b["tq"] is not None) == (name == "pmc_fig_caption")
+        # same-article figures stay as negatives (no group masking); md5 duplicates are gold (masked)
+        assert (b["qgroup"] == -1).all()
+    pairs = [json.loads(x) for x in open(out / "pmc_fig_caption" / "pairs.jsonl")]
+    dup = [p for p in pairs if p["pos"].endswith("-f0")]
+    assert all(len(p["gold"]) == 4 for p in dup)  # f0 and f1 of both shards share md5 "dup"

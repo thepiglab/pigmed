@@ -1,0 +1,13 @@
+ARTICLE. Passages are marked [[P1]] ... [[/P1]] and so on.
+<<<
+{{article}}
+>>>
+
+First set biomedical: true if the article is about human or animal health, medicine, biology, biomedical science or public health; false for physics, chemistry, materials, engineering, computing, economics or social topics without a health focus.
+
+Write one intent card per line below.
+{{card_lines}}
+
+{{passage_rule}}
+{{reader_rules}}{{need_rules}}
+{{type_defs}}

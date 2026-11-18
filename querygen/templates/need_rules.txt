@@ -1,0 +1,12 @@
+For each card:
+- need: one sentence stating what someone wants to know, standalone (see the rules above); 8-30 words.
+- type: the requested type when the passage allows it, else the closest type.
+- narrative: 1-2 sentences, like a TREC topic narrative: what a relevant document must contain to satisfy the need, and what would NOT count (near misses).
+- pico: for clinical or intervention questions fill population, intervention, comparison and outcome (short phrases); otherwise leave all four empty.
+- answer: the passage's answer in at most 15 words.
+- specificity: how many published papers would answer this need. unique = essentially this paper; few = a handful; many = textbook knowledge or a very common finding.
+- audience: which kinds of people would plausibly have this need (clinician, researcher, student, lay, other).
+- min_expertise: 0 anyone, 1 some background, 2 professional, 3 specialist in this area.
+- entities: 1-5 key named things (drug, gene, disease, organism, measure).
+- skip: true only if the passage cannot honestly answer a need of this kind (leave the other fields short).
+Prefer needs that a real searcher would have (a result, a comparison, a method detail, a decision) over generic definitions.

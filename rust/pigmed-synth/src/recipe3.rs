@@ -26,7 +26,7 @@ use std::sync::OnceLock;
 use std::time::Instant;
 
 /// Recipe version written into every row (release provenance).
-pub const RECIPE: &str = "v3.1b";
+pub const RECIPE: &str = "v3.1d";
 pub const LIBRARY_SEED: &str = "v3";
 /// Persona-first: candidate readers offered per card; stage A picks the plausible one or none (v3.1 fix 7).
 const CANDS: usize = 3;
@@ -132,6 +132,12 @@ pub struct Card {
     pub fallback: bool,
     /// PF: stage A said none of the candidates fit; persona matched to the card's audience (v3.1b)
     pub matched: bool,
+    /// stage A judged the article not biomedical (v3.1c): no queries from it
+    pub off_domain: bool,
+    /// v3.1d: the extra per-article card for a patient, carer or clinician reader (skipped for non-clinical papers)
+    pub health: bool,
+    /// v3.1d: stage A's concrete role for the field expert when no candidate fits ("veterinary surgeon", ...)
+    pub expert_role: String,
     pub need: String,
     /// TREC-style narrative: what counts as relevant and what does not
     pub narrative: String,
@@ -159,7 +165,12 @@ pub fn plan_cards(layout: Layout, art: &Article, chunks: &[&SampleChunk]) -> Vec
         for s in 1..=TEXT_SLOTS {
             let id = format!("{}.c{s}", c.marker);
             if layout == Layout::TextV3Pf {
-                let cands = (0..CANDS).map(|k| (uh(&[&c.chunk_id, "pf", &s.to_string(), &k.to_string()]) % LIBRARY_SIZE as u64) as usize).collect();
+                // v3.1c: stratified candidates, so a plausible reader of each kind is always on offer:
+                // (a) lay / patient / family, (b) clinician or student, (c) researcher or other professional
+                let cands = CAND_GROUPS.iter().enumerate().map(|(k, groups)| {
+                    let start = (uh(&[&c.chunk_id, "pf", &s.to_string(), &k.to_string()]) % LIBRARY_SIZE as u64) as usize;
+                    (0..LIBRARY_SIZE).map(|j| (start + j) % LIBRARY_SIZE).find(|&i| groups.contains(&lib()[i].group.as_str())).unwrap_or(start)
+                }).collect();
                 out.push(Card { id, marker: c.marker.clone(), cands, ..Default::default() });
             } else {
                 let sp = text_spec(&c.chunk_id, &format!("s{s}"), ok, &taken);
@@ -167,6 +178,15 @@ pub fn plan_cards(layout: Layout, art: &Article, chunks: &[&SampleChunk]) -> Vec
                 out.push(Card { id, marker: c.marker.clone(), want_type: sp.intent, ..Default::default() });
             }
         }
+    }
+    // v3.1d: one extra card per article, on a hash-chosen passage, for a patient / carer (a) or clinician (b) reader
+    if layout == Layout::TextV3Pf && !chunks.is_empty() {
+        let c = chunks[(uh(&[&art.article_id, "health"]) % chunks.len() as u64) as usize];
+        let cands = CAND_GROUPS[..2].iter().enumerate().map(|(k, groups)| {
+            let start = (uh(&[&c.chunk_id, "health", &k.to_string()]) % LIBRARY_SIZE as u64) as usize;
+            (0..LIBRARY_SIZE).map(|j| (start + j) % LIBRARY_SIZE).find(|&i| groups.contains(&lib()[i].group.as_str())).unwrap_or(start)
+        }).collect();
+        out.push(Card { id: format!("{}.h", c.marker), marker: c.marker.clone(), cands, health: true, ..Default::default() });
     }
     out
 }
@@ -176,16 +196,37 @@ pub fn prompt_a(layout: Layout, art: &Article, cards: &[Card]) -> String {
         format!("{}: passage [[{}]]; requested type: {}", c.id, c.marker, c.want_type)
     } else {
         let who: Vec<String> = c.cands.iter().zip(READERS).map(|(&p, r)| format!("({r}) {}", lib()[p].card())).collect();
-        format!("{}: passage [[{}]]; candidate readers: {}. Set reader to the one most likely to actually read THIS article \
-and have a need this passage answers, or none if none of them plausibly would; write that reader's need.", c.id, c.marker, who.join("; "))
+        if c.health {
+            format!("{}: passage [[{}]]; HEALTH CARD, candidate readers: {}. Only if this is a clinical or health article \
+that a patient, carer or clinician would really read: set reader to that person and write the need they would have \
+that this passage answers. Otherwise set skip true.", c.id, c.marker, who.join("; "))
+        } else {
+            format!("{}: passage [[{}]]; candidate readers: {}. Set reader to the one most likely to actually read THIS article \
+and have a need this passage answers, or none if none of them plausibly would (then name the expert_role of a real \
+professional who would); write that reader's need.", c.id, c.marker, who.join("; "))
+        }
     }).collect();
+    let rules = if cards.iter().any(|c| !c.cands.is_empty()) { READER_RULES } else { "" };
     let pf = if layout == Layout::TextV3Pf { "Cards for different people on the same passage should differ when their needs differ.\n" } else {
         "Cards on the same passage must state different needs.\n" };
-    format!("ARTICLE. Passages are marked [[P1]] ... [[/P1]] and so on.\n<<<\n{}\n>>>\n\nWrite one intent card per line below.\n{}\n\n{pf}{NEED_RULES}\n{TYPE_DEFS}",
-        art.text, lines.join("\n"))
+    format!("ARTICLE. Passages are marked [[P1]] ... [[/P1]] and so on.\n<<<\n{}\n>>>\n\nFirst set biomedical: true if the \
+article is about human or animal health, medicine, biology, biomedical science or public health; false for physics, \
+chemistry, materials, engineering, computing, economics or social topics without a health focus.\n\nWrite one intent card \
+per line below.\n{}\n\n{pf}{rules}{NEED_RULES}\n{TYPE_DEFS}", art.text, lines.join("\n"))
 }
 
 const READERS: [&str; 4] = ["a", "b", "c", "none"];
+/// Candidate strata (v3.1c): one lay reader, one clinician or student, one researcher or other professional.
+const CAND_GROUPS: [&[&str]; 3] = [&["lay"], &["clinician", "student"], &["researcher", "other"]];
+const READER_RULES: &str = "Choosing the reader: a reader is plausible only if their role AND goal would lead them to \
+this article and to this need. A patient or family member asks about their own or a relative's health, treatment, \
+risk or everyday life, not lab methods, assay details, taxonomy or statistics. A clinician asks about patients, \
+diagnosis, treatment or care. Researchers ask about methods, results and mechanisms in their own kind of field. Other \
+professionals (journalist, librarian, policy analyst, veterinarian, ...) ask what their job needs. If no candidate \
+fits (for example a plant, veterinary, agricultural, ecological or technical paper that none of them would read), set \
+reader to none and set expert_role to the concrete job of someone who would read it (e.g. \"veterinary surgeon\", \
+\"agronomist\", \"hospital pharmacist\", \"cardiologist\", \"epidemiologist\", \"bioinformatician\", \"sports \
+physiotherapist\"), not a generic \"researcher\". Otherwise leave expert_role empty.\n";
 
 pub fn schema_a(cards: &[Card]) -> Value {
     let ids: Vec<&str> = cards.iter().map(|c| c.id.as_str()).collect();
@@ -202,9 +243,11 @@ pub fn schema_a(cards: &[Card]) -> Value {
     if cards.iter().any(|c| !c.cands.is_empty()) {
         item["properties"]["reader"] = json!({"enum": READERS[..CANDS].iter().chain(["none"].iter()).collect::<Vec<_>>()});
         item["required"].as_array_mut().unwrap().insert(1, json!("reader"));
+        item["properties"]["expert_role"] = json!({"type": "string"});
+        item["required"].as_array_mut().unwrap().insert(2, json!("expert_role"));
     }
-    json!({"type": "object", "required": ["cards"], "additionalProperties": false,
-        "properties": {"cards": {"type": "array", "minItems": cards.len(), "maxItems": cards.len(), "items": item}}})
+    json!({"type": "object", "required": ["biomedical", "cards"], "additionalProperties": false,
+        "properties": {"biomedical": {"type": "boolean"}, "cards": {"type": "array", "minItems": cards.len(), "maxItems": cards.len(), "items": item}}})
 }
 
 /// Fill planned cards from the stage-A reply; unknown or repeated ids are ignored, missing cards stay skipped.
@@ -230,14 +273,17 @@ pub fn fill_cards(plan: &[Card], v: &Value) -> Vec<Card> {
         c.entities = e["entities"].as_array().into_iter().flatten().filter_map(|x| x.as_str().map(|x| x.trim().to_string())).filter(|x| !x.is_empty()).collect();
         c.skip = e["skip"].as_bool().unwrap_or(false) || c.need.split_whitespace().count() < 4;
         if !c.cands.is_empty() {
-            match READERS[..CANDS].iter().position(|r| e["reader"].as_str() == Some(*r)) {
+            match READERS[..c.cands.len()].iter().position(|r| e["reader"].as_str() == Some(*r)) {
                 Some(i) => { c.persona = Some(c.cands[i]); c.fallback = false; }
-                // v3.1b: none of the candidates fits -> a reader matched to the card's own audience and expertise
-                // (the intent-first rule); a field expert only when nothing in the library matches
-                None => match match_persona(c, &format!("{}|reader", c.cands[0])) {
-                    Some((i, _)) => { c.persona = Some(i); c.fallback = false; c.matched = true; }
-                    None => { c.persona = Some(fallback_persona(c.cands[0])); c.fallback = true; }
-                },
+                // health card without a fitting patient / clinician reader: no card
+                None if c.health => { c.skip = true; }
+                // v3.1d: an expert of the article's own field, with stage A's concrete role and a library persona's
+                // demographics and typing habits (any professional group, expertise >= 2)
+                None => {
+                    c.persona = Some(fallback_persona(c.cands[0]));
+                    c.fallback = true;
+                    c.expert_role = s("expert_role").chars().take(60).collect();
+                }
             }
         }
     }
@@ -248,14 +294,16 @@ pub fn fill_cards(plan: &[Card], v: &Value) -> Vec<Card> {
 /// with professional expertise, shown to stage B as working in the article's own field (`who`).
 pub fn fallback_persona(seed: usize) -> usize {
     let l = lib();
-    (0..l.len()).map(|k| (seed + k) % l.len()).find(|&i| l[i].group == "researcher" && l[i].expertise >= 2).unwrap_or(seed % l.len())
+    (0..l.len()).map(|k| (seed + k) % l.len()).find(|&i| l[i].group != "lay" && l[i].expertise >= 2).unwrap_or(seed % l.len())
 }
 
 /// Persona text shown to stage B.
 pub fn who(c: &Card, p: usize, stretch: bool) -> String {
     let pc = lib()[p].card();
     if c.fallback {
-        format!("researcher working in this article's own field{}", &pc[pc.find(',').unwrap_or(pc.len())..])
+        let role = c.expert_role.trim();
+        let role = if role.is_empty() || role.eq_ignore_ascii_case("researcher") { "expert working in this article's own field" } else { role };
+        format!("{role}{}", &pc[pc.find(',').unwrap_or(pc.len())..])
     } else if stretch {
         format!("{pc} (has no training in this area: uses everyday words)")
     } else {
@@ -263,9 +311,28 @@ pub fn who(c: &Card, p: usize, stretch: bool) -> String {
     }
 }
 
+/// Research-agenda needs ("where should research on X go", "future directions", "research gaps"): answered by every
+/// discussion section, so generic (v3.1d).
+pub fn research_agenda(s: &str) -> bool {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(r"(?i)\bfuture (research|directions?|studies|work|perspectives?)\b|\bresearch (gaps?|agenda|priorities)\b|\bwhere (should|does|will) (research|the field)\b|\bnext steps (for|in) (research|the field)\b|\bwhat (further|more) research\b").unwrap()).is_match(s)
+}
+
+/// Study-local labels (v3.1d): participant / arm labels ("Rider B", "patient 3", "Group A") and bare short codes
+/// ("B510") that only the paper defines. A code stays when the query says what it is ("strain B510", "compound
+/// 4b", "Bacillus ... TF28").
+pub fn local_label(q: &str) -> bool {
+    static PART: OnceLock<Regex> = OnceLock::new();
+    static CODE: OnceLock<Regex> = OnceLock::new();
+    let part = PART.get_or_init(|| Regex::new(r"\b(?:[Rr]ider|[Pp]articipant|[Ss]ubject|[Pp]atient|[Cc]ase|[Vv]olunteer|[Dd]onor|[Hh]orse|[Dd]og|[Mm]ouse|[Aa]nimal|[Ss]ite|[Ww]ard|[Cc]linic|[Hh]ospital|[Ss]chool|[Vv]illage|[Hh]ousehold|[Ff]arm|[Ii]nterviewee|[Rr]espondent|[Nn]urse|[Ss]tudent|[Tt]eacher|[Cc]ohort|[Aa]rm|[Gg]roup)\s+(?:[A-Z]|\d{1,3}|[A-Z]\d{1,2}|[IVX]{1,4})\b").unwrap());
+    let code = CODE.get_or_init(|| Regex::new(r"(?i)(?:\b(strain|isolate|compound|cell line|clone|line|variant|mutant|construct|plasmid|peptide|derivative|analogue|analog|inhibitor|drug|candidate|cultivar|accession|batch|sample|formulation)\s+)?\b([A-Z]{1,2}\d{3,}[A-Za-z]?)\b").unwrap());
+    part.is_match(q) || code.captures_iter(q).any(|c| c.get(1).is_none())
+}
+
 /// Why a card is not used for single-positive queries ("" = kept).
 pub fn card_drop(c: &Card) -> &'static str {
-    if c.skip { "skip" } else if doc_ref(&c.need) { "doc_ref" } else if c.specificity == "many" { "generic" } else { "" }
+    if c.off_domain { "off_domain" } else if c.skip { "skip" } else if doc_ref(&c.need) { "doc_ref" }
+    else if c.specificity == "many" || research_agenda(&c.need) { "generic" } else { "" }
 }
 
 /// Intent-first match: a library persona whose group is in the card's audience and whose expertise is at least the
@@ -394,6 +461,10 @@ incomplete description", "end with \"can't remember the name\" or similar", "\"I
 const SCENES: [&str; 5] = ["begin with \"my\" (my mother, my patient, my lab...)", "begin with the situation (\"after...\", \"since...\", \
 \"we have...\")", "begin with the question, then one clause about the situation", "begin with the person's role (\"nurse here,\", \
 \"PhD student,\")", "begin with \"our\" (our clinic, our team...)"];
+/// v3.1d: scenario openers for patients and family: their own life, never a clinic, team or lab.
+const LAY_SCENES: [&str; 4] = ["begin with \"my\" (my mum, my son, my doctor said...)", "begin with their situation (\"since my \
+diagnosis...\", \"after the surgery...\")", "begin with the question, then one clause about their situation", "begin with \"I\" \
+and their own situation (\"I have...\", \"I'm caring for...\")"];
 
 /// One surface slot: (card, persona, style).
 #[derive(Clone, Debug)]
@@ -430,6 +501,7 @@ pub fn plan_slots(layout: Layout, cards: &[Card], art: &Article) -> Vec<Slot> {
                     let l1 = persona.map(|i| lib()[i].first_language.as_str()).unwrap_or("");
                     format!("make at least two slips typical of a {} speaker: {}; never perfect English", if l1.is_empty() { "second-language" } else { l1 }, l2_slips(l1))
                 }
+                "scenario" if persona.is_some_and(|i| lib()[i].group == "lay") => LAY_SCENES[h % LAY_SCENES.len()].to_string(),
                 "scenario" => SCENES[h % SCENES.len()].to_string(),
                 _ => String::new(),
             };
@@ -460,7 +532,7 @@ pub fn prompt_b(cards: &[Card], slots: &[Slot]) -> String {
     format!("For each slot, write the search query this person would type for this need, in the slot's style. \
 Write 3-25 words (keyword style: 2-6 words). The person decides which key terms to use and may misname them as \
 their knowledge allows. Do not copy or closely paraphrase the need sentence: use at most three words in a row from \
-it. The query text must not contain slot names.\n\n{}", blocks.join("\n\n"))
+it. The query text must not contain slot names. Never point at something only the article's reader knows: no \"they\", \"this <thing>\", \"the lab\" or \"the method\" unless the query names it (a study, trial or cohort may be named, e.g. \"the Ningbo air pollution study\"). No LaTeX.\n\n{}", blocks.join("\n\n"))
 }
 
 pub fn schema_b(slots: &[Slot]) -> Value {
@@ -485,6 +557,35 @@ pub fn jaccard(a: &str, b: &str) -> f64 {
 
 /// Why a stage-B query is rejected ("" = kept). v3.1: leaked slot or passage ids (fix 5), JSON spilled into the
 /// text, copies of the need (fix 1, Jaccard >= 0.7), and styles the text plainly does not follow (fix 8).
+/// LaTeX left in a query ("$\alpha$7Tg", "\textit{...}").
+pub fn tex(q: &str) -> bool {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(r"\$[^$]*\$|\\[a-zA-Z]+\{?|\{\\").unwrap()).is_match(q)
+}
+
+/// A reference only the paper's reader can resolve (v3.1c): "did they use ...", "how they did ...", "this fungus",
+/// "the lab", "the special cell stain". Named known-item lookups stay ("the ningbo air pollution study", "the polish
+/// aml study"): a definite phrase is unresolved only when its modifiers are all generic words.
+pub fn unresolved(q: &str) -> bool {
+    static THEY: OnceLock<Regex> = OnceLock::new();
+    static THIS: OnceLock<Regex> = OnceLock::new();
+    static THE: OnceLock<Regex> = OnceLock::new();
+    let they = THEY.get_or_init(|| Regex::new(r"(?i)\b(did|do|does|how|why|what|where|when|which|were|have|had) they\b|\bthey (used|did|found|measured|tested|showed|reported|chose|compared|recruited|collected|analy[sz]ed)\b").unwrap());
+    let this = THIS.get_or_init(|| Regex::new(r"(?i)\b(this|these|that|those) (fungus|bacteri\w*|virus|drug|compound|protein|gene|molecule|method|model|technique|approach|stain|assay|device|tool|cohort|sample|samples|patients|participants|mice|rats|animals|cells|lab|team|experiment|intervention|program|programme|thing|stuff)\b").unwrap());
+    let the = THE.get_or_init(|| Regex::new(r"(?i)\bthe ((?:[a-z-]+ ){0,2})(lab|team|group's|authors|stain|method|model|technique|approach|assay|procedure|protocol|device|tool|compound|drug|intervention|program|programme|sample|samples|dataset|data set)\b").unwrap());
+    const GENERIC: [&str; 18] = ["special", "new", "novel", "same", "specific", "different", "other", "proposed", "current", "given",
+        "above", "following", "previous", "particular", "their", "this", "that", "used"];
+    const BACK: [&str; 10] = ["special", "same", "proposed", "above", "given", "following", "previous", "aforementioned", "described", "used"];
+    they.is_match(q) || this.is_match(q) || the.captures_iter(q).any(|c| {
+        let mods: Vec<&str> = c[1].split_whitespace().collect();
+        let head = c[2].to_lowercase();
+        (mods.is_empty() && matches!(head.as_str(), "lab" | "team" | "group's" | "authors" | "stain" | "device" | "tool" | "compound" | "drug" | "intervention" | "sample" | "samples" | "dataset" | "data set"))
+            || (!mods.is_empty() && mods.iter().all(|m| GENERIC.contains(&m.to_lowercase().as_str())))
+            // words that point back into the paper whatever follows: "the special cell stain", "the same assay"
+            || mods.first().is_some_and(|m| BACK.contains(&m.to_lowercase().as_str()))
+    })
+}
+
 pub fn reject(q: &str, need: &str, style: &str) -> &'static str {
     static LEAK: OnceLock<Regex> = OnceLock::new();
     let words = q.split_whitespace().count();
@@ -496,6 +597,14 @@ pub fn reject(q: &str, need: &str, style: &str) -> &'static str {
         "spill"
     } else if doc_ref(q) || exam(q) {
         "banned"
+    } else if tex(q) {
+        "tex"
+    } else if unresolved(q) {
+        "unresolved"
+    } else if local_label(q) {
+        "local_label"
+    } else if research_agenda(q) {
+        "generic"
     } else if jaccard(q, need) >= 0.7 {
         "copy"
     } else if (style == "keyword" && (words > 7 || q.contains('?'))) || (style == "expert_terse" && words > 15) {
@@ -518,7 +627,10 @@ fn text_article3(ag: &ureq::Agent, a: &GenArgs, art: &Article, chunks: &[&Sample
         out.iter_mut().for_each(|g| g.error = Some(format!("stage A unparsed: {}", format!("{} chars, {} completion tokens, max {}: {}", ra.content.len(), ra.completion_tokens, a.max_tokens, ra.content.chars().take(200).collect::<String>()))));
         return out;
     };
-    let cards = fill_cards(&plan, &va);
+    let mut cards = fill_cards(&plan, &va);
+    if va["biomedical"] == json!(false) {
+        cards.iter_mut().for_each(|c| c.off_domain = true);
+    }
     let slots = plan_slots(a.layout, &cards, art);
     let (mut pt, mut ct, mut lat) = (ra.prompt_tokens, ra.completion_tokens, la);
     let mut accepted: HashMap<String, (String, String, &'static str)> = HashMap::new(); // slot -> (clean, noisy, reject reason)
@@ -615,6 +727,7 @@ pub fn run_text3(a: &GenArgs, chunks: &[SampleChunk], articles: &[Article]) -> R
     }
     s["cards"] = json!(ncards);
     s["card_outcomes"] = json!(drops);
+    s["api"] = crate::generate::api().report();
     Ok((gens, s))
 }
 
@@ -725,7 +838,8 @@ mod tests {
         let (art, a, b) = setup();
         for lay in [Layout::TextV3If, Layout::TextV3Pf, Layout::TextV3Np] {
             let plan = plan_cards(lay, &art, &[&a, &b]);
-            assert_eq!(plan.len(), 2 * TEXT_SLOTS);
+            // persona-first adds one health card per article (v3.1d)
+            assert_eq!(plan.len(), 2 * TEXT_SLOTS + (lay == Layout::TextV3Pf) as usize);
             assert_eq!(plan, plan_cards(lay, &art, &[&a, &b]));
             assert_eq!(lay == Layout::TextV3Pf, plan[0].cands.len() == CANDS);
             if lay == Layout::TextV3Pf {
@@ -748,11 +862,16 @@ mod tests {
             assert_eq!(card_drop(&cards[2]), "generic");
             assert_eq!(card_drop(&cards[3]), "skip");
             if lay == Layout::TextV3Pf {
-                // no "reader" in the reply -> a reader matched to the card's audience (clinician or lay here)
-                let p = &lib()[cards[0].persona.unwrap()];
-                assert!(cards[0].matched && !cards[0].fallback && (p.group == "clinician" || p.group == "lay"), "{}", p.group);
-                let fb = Card { fallback: true, ..cards[0].clone() };
-                assert!(who(&fb, fallback_persona(7), false).starts_with("researcher working in this article's own field,"));
+                // no "reader" in the reply -> an expert of the article's own field (v3.1c)
+                assert!(cards[0].fallback && lib()[cards[0].persona.unwrap()].group != "lay");
+                assert!(who(&cards[0], cards[0].persona.unwrap(), false).starts_with("expert working in this article's own field,"));
+                let named = Card { expert_role: "veterinary surgeon".into(), ..cards[0].clone() };
+                assert!(who(&named, named.persona.unwrap(), false).starts_with("veterinary surgeon,"));
+                assert!(plan.last().unwrap().health && plan.last().unwrap().cands.len() == 2);
+                // stratified candidates: lay, clinician/student, researcher/other
+                let g: Vec<&str> = plan[0].cands.iter().map(|&i| lib()[i].group.as_str()).collect();
+                assert!(g[0] == "lay" && ["clinician", "student"].contains(&g[1]) && ["researcher", "other"].contains(&g[2]), "{g:?}");
+                assert!(prompt_a(lay, &art, &plan).contains("a reader is plausible only if"));
             }
             let slots = plan_slots(lay, &cards, &art);
             assert_eq!(slots.len(), STYLES_PER_PAIR);
@@ -776,6 +895,30 @@ mod tests {
         assert_eq!(reject("palliative care MAID support\n\n{\"a\": 1}", "x", "natural_question"), "spill");
         assert_eq!(reject("How is the purification of rAXE performed and how was the molecular mass evaluated?", "x", "keyword"), "style");
         assert_eq!(reject("coenzyme Q10 statin myopathy", "x", "keyword"), "");
+        // v3.1c: TeX and references only the paper's reader can resolve
+        assert_eq!(reject("Sca-1 $\\alpha$7Tg eccentric exercise inflammation", "x", "keyword"), "tex");
+        for q in ["Did they use sliding windows instead of annotated regions for noncoding associations",
+                  "how they did the transcriptomic analysis of Fusarium graminearum",
+                  "The lab is looking at how this fungus reacts to the bacteria",
+                  "how long to wait with the special cell stain to see different cell types"] {
+            assert_eq!(reject(q, "x", "natural_question"), "unresolved", "{q}");
+        }
+        // v3.1d: study-local labels and research-agenda queries
+        for q in ["Rider B kinematic patterns for different obstacle heights", "What are the environmental consequences of using B510?",
+                  "Patient 3 recovery time after hip surgery"] {
+            assert_eq!(reject(q, "x", "natural_question"), "local_label", "{q}");
+        }
+        for q in ["Bacillus amyloliquefaciens strain TF28 secondary metabolites", "BRCA1 TP53 HER2 CD8 IL6 breast cancer",
+                  "efficacy of compound 4b against MRSA", "H1N1 vaccine coverage 2019"] {
+            assert_ne!(reject(q, "x", "keyword"), "local_label", "{q}");
+        }
+        assert_eq!(reject("Where should research on MSCC go from here?", "x", "natural_question"), "generic");
+        assert!(research_agenda("What are the future research directions for MSCC?"));
+        for q in ["did the ningbo air pollution study account for personal risk factors",
+                  "whhat were the complete remission rates across the different age cohorts in the polish aml study",
+                  "how long can they wait before surgery for appendicitis in kids"] {
+            assert_ne!(reject(q, "x", "natural_question"), "unresolved", "{q}");
+        }
         let art = Article { title: "Single-stage repair of hypospadias in children: a randomized trial".into(), year: Some(2019),
             article_type: "research-article".into(), pub_types: vec!["Randomized Controlled Trial".into(), "Journal Article".into()], ..Default::default() };
         let c = constraints(&art);

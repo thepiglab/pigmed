@@ -1216,6 +1216,7 @@ dependencies = [
  "arrow-array",
  "clap",
  "flate2",
+ "half",
  "hex",
  "image",
  "md-5",

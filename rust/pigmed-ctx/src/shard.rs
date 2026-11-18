@@ -441,7 +441,8 @@ pub fn run(a: &ShardArgs) -> Result<Value> {
     let keep = read_keep(&a.keep, &exclude)?;
     let is_kept = |x: &str| keep.contains_key(x);
     let mut arts = read_chunks(&a.chunks, &is_kept)?;
-    arts.retain(|x| x.commercial);
+    // commercial only; articles without body text chunks (abstract-only items) are no use for S2 or figures
+    arts.retain(|x| x.commercial && x.units.iter().any(|u| !u.is_abstract));
     if let Some(n) = a.limit {
         arts.truncate(n);
     }
